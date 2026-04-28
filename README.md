@@ -1,7 +1,56 @@
-# python数字货币量化交易视频代码
+# BitQuant - 数字货币量化交易平台
+
+Python/C++ 高性能量化交易框架，支持多策略回测与实盘交易。
+
+## 🚀 C++ 高性能版本
+
+**[bitquant_cpp/](bitquant_cpp/)** - 高性能C++多策略交易平台
+
+- **性能**: 100万+ bars/sec 回测吞吐量
+- **多策略**: 策略独立运行，事件自动分发
+- **风控**: 订单流控、持仓限制、自成交预防
+- **接口**: 支持Binance、Huobi等交易所
+
+快速开始:
+```bash
+cd bitquant_cpp
+mkdir build && cd build
+cmake .. -DENABLE_BINANCE_API=OFF
+make -j$(nproc)
+./bitquant_integration_tests
+```
+
+---
+
+## 项目结构
+
+```
+bitquant/
+├── bitquant_cpp/           # C++ 高性能交易平台 ⭐
+│   ├── include/            # 头文件
+│   │   ├── engine/         # 交易引擎、策略管理、风控
+│   │   ├── exchange/       # 交易所统一接口
+│   │   └── data/           # 数据管理、技术指标
+│   ├── src/                # 实现文件
+│   ├── examples/           # 示例代码
+│   ├── tests/              # 集成测试
+│   └── README.md           # 详细文档
+├── backtest/               # Python 回测框架
+│   └── backtester/         # Broker、Strategy、ArrayManager
+├── binance_api/            # Python Binance API
+├── ccxt_study/             # CCXT 统一交易所API
+├── huobi_api/              # Python 火币API
+├── bybit/                  # Bybit数据爬虫
+└── technical_indicators/   # 技术指标实现
+```
+
+---
+
+## Python 量化交易代码
+
 youtube视频链接: [https://www.youtube.com/channel/UCjCMoRi4dZ6LRV2KL_RP8KQ/videos](https://www.youtube.com/channel/UCjCMoRi4dZ6LRV2KL_RP8KQ/videos)
 
-B站找到视频链接: [https://space.bilibili.com/401686908](https://space.bilibili.com/401686908)
+B站视频链接: [https://space.bilibili.com/401686908](https://space.bilibili.com/401686908)
 
 ## 币安合约交易快速下单软件下载
 链接地址：https://share.weiyun.com/F03qTiin
