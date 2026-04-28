@@ -3,3 +3,41 @@ ccxt-master
 */__pycache__
 */*/__pycache__
 .DS_Store
+
+# C++ build files
+bitquant_cpp/build/
+bitquant_cpp/.cache/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+*.app
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.cmake
+!CMakeLists.txt
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# Third party repositories (cloned separately)
+binapi/
+howtrader/
+research/
