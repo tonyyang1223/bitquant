@@ -39,6 +39,9 @@ add_library(bitquant
     src/engine/strategy.cpp
     src/engine/event.cpp
     src/engine/risk_manager.cpp
+    src/engine/strategy_manager.cpp
+    src/engine/strategy_context.cpp
+    src/engine/trading_engine.cpp
     src/statistics/performance.cpp
     src/utils/datetime.cpp
     src/utils/logger.cpp
@@ -136,6 +139,9 @@ if(BUILD_EXAMPLES)
 
         add_executable(demo_exchange examples/demo_exchange.cpp)
         target_link_libraries(demo_exchange PRIVATE bitquant)
+
+        add_executable(demo_multi_strategy examples/demo_multi_strategy.cpp)
+        target_link_libraries(demo_multi_strategy PRIVATE bitquant)
     endif()
 endif()
 
