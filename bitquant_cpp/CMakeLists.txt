@@ -47,6 +47,7 @@ add_library(bitquant
     src/utils/logger.cpp
     src/utils/thread_pool.cpp
     src/config/config.cpp
+    src/exchange/exchange_factory.cpp
 )
 
 target_include_directories(bitquant
@@ -95,7 +96,6 @@ if(ENABLE_BINANCE_API)
     target_sources(bitquant PRIVATE
         src/exchange/binance_api.cpp
         src/exchange/binance_gateway.cpp
-        src/exchange/exchange_factory.cpp
         src/exchange/websocket_client.cpp
     )
 
@@ -105,26 +105,26 @@ endif()
 # Tests
 if(BUILD_TESTS)
     enable_testing()
-    find_package(GTest QUIET)
 
+    # Integration tests (standalone, no GTest dependency)
+    add_executable(bitquant_integration_tests
+        tests/integration/test_integration.cpp
+    )
+    target_link_libraries(bitquant_integration_tests PRIVATE bitquant)
+    add_test(NAME integration_tests COMMAND bitquant_integration_tests)
+
+    find_package(GTest QUIET)
     if(GTest_FOUND)
         add_executable(bitquant_tests
             tests/unit/test_ring_buffer.cpp
             tests/unit/test_array_manager.cpp
             tests/unit/test_broker.cpp
         )
-
-        target_link_libraries(bitquant_tests
-            PRIVATE
-                bitquant
-                GTest::gtest
-                GTest::gtest_main
-        )
-
+        target_link_libraries(bitquant_tests PRIVATE bitquant GTest::gtest GTest::gtest_main)
         include(GoogleTest)
         gtest_discover_tests(bitquant_tests)
     else()
-        message(STATUS "GTest not found, tests will not be built")
+        message(STATUS "GTest not found, unit tests will not be built (integration tests will be built)")
     endif()
 endif()
 
