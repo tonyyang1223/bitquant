@@ -4,6 +4,9 @@ ccxt-master
 */*/__pycache__
 .DS_Store
 
+# Worktrees
+.worktrees/
+
 # C++ build files
 bitquant_cpp/build/
 bitquant_cpp/.cache/
