@@ -23,6 +23,23 @@
 namespace bitquant {
 
 //=============================================================================
+// Gateway Configuration
+//=============================================================================
+
+/**
+ * @brief Gateway connection configuration
+ */
+struct GatewayConfig {
+    std::string name;
+    std::string api_key;
+    std::string api_secret;
+    std::string proxy_host;
+    int proxy_port = 0;
+    bool testnet = false;
+    size_t timeout_ms = 10000;
+};
+
+//=============================================================================
 // Callback Types
 //=============================================================================
 
@@ -251,6 +268,15 @@ public:
      */
     virtual std::optional<OrderData> query_order(const std::string& orderid) {
         (void)orderid;
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Query specific order status
+     * @param req Order query request
+     */
+    virtual std::optional<OrderData> query_order(const OrderQueryRequest& req) {
+        (void)req;
         return std::nullopt;
     }
 

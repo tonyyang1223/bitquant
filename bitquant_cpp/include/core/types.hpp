@@ -427,6 +427,19 @@ struct CancelRequest {
 };
 
 /**
+ * @brief Order query request
+ */
+struct OrderQueryRequest {
+    std::string orderid;
+    std::string symbol;
+    Exchange exchange = Exchange::LOCAL;
+
+    std::string vt_symbol() const {
+        return symbol + "." + std::to_string(static_cast<int>(exchange));
+    }
+};
+
+/**
  * @brief Subscribe request
  */
 struct SubscribeRequest {
