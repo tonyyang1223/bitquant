@@ -100,6 +100,7 @@ if(ENABLE_BINANCE_API)
         src/exchange/binance_api.cpp
         src/exchange/binance_gateway.cpp
         src/exchange/websocket_client.cpp
+        src/exchange/binance_mapping.cpp
     )
 
     target_link_libraries(bitquant PUBLIC binapi)
