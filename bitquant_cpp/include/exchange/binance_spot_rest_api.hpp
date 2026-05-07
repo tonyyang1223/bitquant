@@ -16,7 +16,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <functional>
 
 namespace boost {
 namespace asio {
@@ -121,7 +120,7 @@ public:
     std::string send_order(const OrderRequest& req);
 
     /**
-     * @brief Cancel order
+     * @brief Cancel order by symbol and order ID
      * @param symbol Trading pair
      * @param order_id Order ID (client order ID)
      * @return true on success
@@ -129,13 +128,27 @@ public:
     bool cancel_order(const std::string& symbol, const std::string& order_id);
 
     /**
-     * @brief Query order status
+     * @brief Cancel order using CancelRequest (IExchange interface)
+     * @param req Cancel request
+     * @return true on success
+     */
+    bool cancel_order(const CancelRequest& req);
+
+    /**
+     * @brief Query order status by symbol and order ID
      * @param symbol Trading pair
      * @param order_id Order ID (client order ID)
      * @return OrderData if found
      */
     std::optional<OrderData> query_order(const std::string& symbol,
                                           const std::string& order_id);
+
+    /**
+     * @brief Query order using OrderQueryRequest (IExchange interface)
+     * @param req Order query request
+     * @return OrderData if found
+     */
+    std::optional<OrderData> query_order(const OrderQueryRequest& req);
 
     /**
      * @brief Query all open orders
@@ -153,6 +166,12 @@ public:
      * @return Vector of AccountData (one per asset)
      */
     std::vector<AccountData> query_account();
+
+    /**
+     * @brief Query account balance (single aggregated result, IExchange interface)
+     * @return Aggregated AccountData if available
+     */
+    std::optional<AccountData> query_account_single();
 
     //=========================================================================
     // User Data Stream
@@ -185,12 +204,12 @@ public:
     /**
      * @brief Get time offset (local - server)
      */
-    int64_t time_offset() const { return time_offset_; }
+    int64_t time_offset() const noexcept { return time_offset_; }
 
     /**
      * @brief Get last error message
      */
-    const std::string& last_error() const { return last_error_; }
+    const std::string& last_error() const noexcept { return last_error_; }
 
 private:
     struct Impl;
