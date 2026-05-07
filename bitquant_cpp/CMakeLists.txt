@@ -123,6 +123,7 @@ if(BUILD_TESTS)
             tests/unit/test_ring_buffer.cpp
             tests/unit/test_array_manager.cpp
             tests/unit/test_broker.cpp
+            tests/unit/test_binance_mapping.cpp
         )
         target_link_libraries(bitquant_tests PRIVATE bitquant GTest::gtest GTest::gtest_main)
         include(GoogleTest)
