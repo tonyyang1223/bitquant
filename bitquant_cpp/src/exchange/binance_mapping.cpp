@@ -24,6 +24,7 @@ Status status_from_binance(const std::string& status) {
 
 std::string status_to_binance(Status status) {
     static const std::unordered_map<Status, std::string> map = {
+        {Status::SUBMITTING, "NEW"},      // Internal state, not yet submitted
         {Status::NOTTRADED, "NEW"},
         {Status::PARTTRADED, "PARTIALLY_FILLED"},
         {Status::ALLTRADED, "FILLED"},
@@ -40,7 +41,9 @@ std::string order_type_to_binance(OrderType type) {
         {OrderType::TAKER, "MARKET"},
         {OrderType::MAKER, "LIMIT_MAKER"},
         {OrderType::STOP, "STOP_LOSS"},
-        {OrderType::STOP_LIMIT, "STOP_LOSS_LIMIT"}
+        {OrderType::STOP_LIMIT, "STOP_LOSS_LIMIT"},
+        {OrderType::FAK, "IOC"},          // Fill And Kill -> Immediate Or Cancel
+        {OrderType::FOK, "FOK"}           // Fill Or Kill
     };
     auto it = map.find(type);
     return it != map.end() ? it->second : "LIMIT";
@@ -52,7 +55,9 @@ OrderType order_type_from_binance(const std::string& type) {
         {"MARKET", OrderType::TAKER},
         {"LIMIT_MAKER", OrderType::MAKER},
         {"STOP_LOSS", OrderType::STOP},
-        {"STOP_LOSS_LIMIT", OrderType::STOP_LIMIT}
+        {"STOP_LOSS_LIMIT", OrderType::STOP_LIMIT},
+        {"IOC", OrderType::FAK},          // Immediate Or Cancel -> Fill And Kill
+        {"FOK", OrderType::FOK}           // Fill Or Kill
     };
     auto it = map.find(type);
     return it != map.end() ? it->second : OrderType::LIMIT;

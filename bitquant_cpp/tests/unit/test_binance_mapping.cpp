@@ -24,6 +24,14 @@ TEST(BinanceMappingTest, StatusToBinance) {
     EXPECT_EQ("FILLED", status_to_binance(Status::ALLTRADED));
     EXPECT_EQ("CANCELED", status_to_binance(Status::CANCELLED));
     EXPECT_EQ("REJECTED", status_to_binance(Status::REJECTED));
+    EXPECT_EQ("NEW", status_to_binance(Status::SUBMITTING));  // SUBMITTING maps to NEW
+}
+
+// Test unknown/invalid input handling
+TEST(BinanceMappingTest, StatusFromBinanceUnknown) {
+    EXPECT_EQ(Status::NOTTRADED, status_from_binance("UNKNOWN"));
+    EXPECT_EQ(Status::NOTTRADED, status_from_binance(""));
+    EXPECT_EQ(Status::NOTTRADED, status_from_binance("invalid"));
 }
 
 // Test order type mappings
@@ -33,6 +41,8 @@ TEST(BinanceMappingTest, OrderTypeToBinance) {
     EXPECT_EQ("LIMIT_MAKER", order_type_to_binance(OrderType::MAKER));
     EXPECT_EQ("STOP_LOSS", order_type_to_binance(OrderType::STOP));
     EXPECT_EQ("STOP_LOSS_LIMIT", order_type_to_binance(OrderType::STOP_LIMIT));
+    EXPECT_EQ("IOC", order_type_to_binance(OrderType::FAK));   // FAK maps to IOC
+    EXPECT_EQ("FOK", order_type_to_binance(OrderType::FOK));   // FOK maps to FOK
 }
 
 TEST(BinanceMappingTest, OrderTypeFromBinance) {
@@ -41,6 +51,15 @@ TEST(BinanceMappingTest, OrderTypeFromBinance) {
     EXPECT_EQ(OrderType::MAKER, order_type_from_binance("LIMIT_MAKER"));
     EXPECT_EQ(OrderType::STOP, order_type_from_binance("STOP_LOSS"));
     EXPECT_EQ(OrderType::STOP_LIMIT, order_type_from_binance("STOP_LOSS_LIMIT"));
+    EXPECT_EQ(OrderType::FAK, order_type_from_binance("IOC"));   // IOC maps to FAK
+    EXPECT_EQ(OrderType::FOK, order_type_from_binance("FOK"));   // FOK maps to FOK
+}
+
+// Test unknown/invalid input handling for order type
+TEST(BinanceMappingTest, OrderTypeFromBinanceUnknown) {
+    EXPECT_EQ(OrderType::LIMIT, order_type_from_binance("UNKNOWN"));
+    EXPECT_EQ(OrderType::LIMIT, order_type_from_binance(""));
+    EXPECT_EQ(OrderType::LIMIT, order_type_from_binance("invalid"));
 }
 
 // Test direction mappings
@@ -52,6 +71,14 @@ TEST(BinanceMappingTest, DirectionToBinance) {
 TEST(BinanceMappingTest, DirectionFromBinance) {
     EXPECT_EQ(Direction::LONG, direction_from_binance("BUY"));
     EXPECT_EQ(Direction::SHORT, direction_from_binance("SELL"));
+}
+
+// Test unknown/invalid input handling for direction
+TEST(BinanceMappingTest, DirectionFromBinanceUnknown) {
+    // Note: direction_from_binance returns SHORT for any non-"BUY" input
+    EXPECT_EQ(Direction::SHORT, direction_from_binance("UNKNOWN"));
+    EXPECT_EQ(Direction::SHORT, direction_from_binance(""));
+    EXPECT_EQ(Direction::SHORT, direction_from_binance("invalid"));
 }
 
 // Test interval mappings
@@ -85,4 +112,11 @@ TEST(BinanceMappingTest, IntervalFromBinance) {
     EXPECT_EQ(Interval::DAILY, interval_from_binance("1d"));
     EXPECT_EQ(Interval::WEEKLY, interval_from_binance("1w"));
     EXPECT_EQ(Interval::MONTHLY, interval_from_binance("1M"));
+}
+
+// Test unknown/invalid input handling for interval
+TEST(BinanceMappingTest, IntervalFromBinanceUnknown) {
+    EXPECT_EQ(Interval::MINUTE_1, interval_from_binance("UNKNOWN"));
+    EXPECT_EQ(Interval::MINUTE_1, interval_from_binance(""));
+    EXPECT_EQ(Interval::MINUTE_1, interval_from_binance("invalid"));
 }

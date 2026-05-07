@@ -20,41 +20,41 @@ namespace bitquant {
 /**
  * @brief Convert Binance status string to Status enum
  */
-Status status_from_binance(const std::string& status);
+[[nodiscard]] Status status_from_binance(const std::string& status);
 
 /**
  * @brief Convert Status enum to Binance status string
  */
-std::string status_to_binance(Status status);
+[[nodiscard]] std::string status_to_binance(Status status);
 
 /**
  * @brief Convert OrderType enum to Binance order type string
  */
-std::string order_type_to_binance(OrderType type);
+[[nodiscard]] std::string order_type_to_binance(OrderType type);
 
 /**
  * @brief Convert Binance order type string to OrderType enum
  */
-OrderType order_type_from_binance(const std::string& type);
+[[nodiscard]] OrderType order_type_from_binance(const std::string& type);
 
 /**
  * @brief Convert Direction enum to Binance side string
  */
-std::string direction_to_binance(Direction dir);
+[[nodiscard]] std::string direction_to_binance(Direction dir);
 
 /**
  * @brief Convert Binance side string to Direction enum
  */
-Direction direction_from_binance(const std::string& side);
+[[nodiscard]] Direction direction_from_binance(const std::string& side);
 
 /**
  * @brief Convert Interval enum to Binance interval string
  */
-std::string interval_to_binance(Interval interval);
+[[nodiscard]] std::string interval_to_binance(Interval interval);
 
 /**
  * @brief Convert Binance interval string to Interval enum
  */
-Interval interval_from_binance(const std::string& interval);
+[[nodiscard]] Interval interval_from_binance(const std::string& interval);
 
 } // namespace bitquant
