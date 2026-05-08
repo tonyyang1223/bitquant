@@ -162,16 +162,17 @@ public:
     //=========================================================================
 
     /**
-     * @brief Query account balances
-     * @return Vector of AccountData (one per asset)
+     * @brief Query account balances (single asset)
+     * @param asset Asset symbol (e.g., "USDT")
+     * @return AccountData if found
      */
-    std::vector<AccountData> query_account();
+    std::optional<AccountData> query_account(const std::string& asset = "");
 
     /**
-     * @brief Query account balance (single aggregated result, IExchange interface)
-     * @return Aggregated AccountData if available
+     * @brief Query all account balances
+     * @return Vector of AccountData (one per asset)
      */
-    std::optional<AccountData> query_account_single();
+    std::vector<AccountData> query_account_all();
 
     //=========================================================================
     // User Data Stream

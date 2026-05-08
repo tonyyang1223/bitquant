@@ -433,7 +433,27 @@ std::vector<OrderData> BinanceSpotRestApi::query_open_orders(const std::string& 
 // Account
 //=============================================================================
 
-std::vector<AccountData> BinanceSpotRestApi::query_account() {
+std::optional<AccountData> BinanceSpotRestApi::query_account(const std::string& asset) {
+    auto accounts = query_account_all();
+    if (asset.empty()) {
+        // Return first non-zero account if no specific asset requested
+        for (const auto& acc : accounts) {
+            if (acc.balance > 0 || acc.frozen > 0) {
+                return acc;
+            }
+        }
+        return accounts.empty() ? std::nullopt : std::optional(accounts[0]);
+    }
+
+    for (const auto& acc : accounts) {
+        if (acc.accountid == asset) {
+            return acc;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<AccountData> BinanceSpotRestApi::query_account_all() {
     std::vector<AccountData> accounts;
     if (!impl_->api) {
         last_error_ = "API not initialized";
@@ -460,28 +480,10 @@ std::vector<AccountData> BinanceSpotRestApi::query_account() {
             accounts.push_back(account);
         }
     } catch (const std::exception& e) {
-        last_error_ = std::string("query_account failed: ") + e.what();
+        last_error_ = std::string("query_account_all failed: ") + e.what();
     }
 
     return accounts;
-}
-
-std::optional<AccountData> BinanceSpotRestApi::query_account_single() {
-    auto accounts = query_account();
-    if (accounts.empty()) {
-        return std::nullopt;
-    }
-
-    // Return aggregated account data (sum all balances)
-    // For single asset query, the caller should use query_account() and filter
-    AccountData aggregated;
-    aggregated.accountid = "AGGREGATED";
-    for (const auto& acc : accounts) {
-        aggregated.balance += acc.balance;
-        aggregated.frozen += acc.frozen;
-    }
-
-    return aggregated;
 }
 
 //=============================================================================

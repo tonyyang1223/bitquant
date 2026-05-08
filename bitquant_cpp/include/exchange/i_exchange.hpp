@@ -357,6 +357,13 @@ public:
     }
 
     /**
+     * @brief Register contract callback
+     */
+    virtual void on_contract(ContractCallback callback) {
+        contract_callback_ = std::move(callback);
+    }
+
+    /**
      * @brief Register error callback
      */
     virtual void on_error(ErrorCallback callback) {
@@ -374,6 +381,7 @@ protected:
     TradeCallback trade_callback_;
     PositionCallback position_callback_;
     AccountCallback account_callback_;
+    ContractCallback contract_callback_;
     ErrorCallback error_callback_;
 };
 

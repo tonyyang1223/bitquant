@@ -96,10 +96,11 @@ bool BinanceSpotGateway::connect(const GatewayConfig& config) {
     auto contracts = rest_api_->get_exchange_info();
     for (const auto& c : contracts) {
         contracts_[c.symbol] = c;
+        if (contract_callback_) contract_callback_(c);
     }
 
     // Query account
-    auto accounts = rest_api_->query_account();
+    auto accounts = rest_api_->query_account_all();
     for (const auto& a : accounts) {
         if (account_callback_) account_callback_(a);
     }
@@ -261,24 +262,12 @@ std::optional<AccountData> BinanceSpotGateway::query_account() {
         return std::nullopt;
     }
 
-    auto accounts = rest_api_->query_account();
-    if (accounts.empty()) {
-        return std::nullopt;
-    }
-
-    // Return first non-zero account (or USDT if available)
-    for (const auto& a : accounts) {
-        if (a.accountid == "USDT" || a.balance > 0) {
-            return a;
-        }
-    }
-
-    return accounts.empty() ? std::nullopt : std::optional(accounts[0]);
+    return rest_api_->query_account();
 }
 
 std::vector<AccountData> BinanceSpotGateway::query_account_all() {
     if (!rest_api_) return {};
-    return rest_api_->query_account();
+    return rest_api_->query_account_all();
 }
 
 std::vector<OrderData> BinanceSpotGateway::query_open_orders(const std::string& symbol) {
