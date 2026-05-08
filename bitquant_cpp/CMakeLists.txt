@@ -152,6 +152,9 @@ if(BUILD_EXAMPLES)
 
         add_executable(demo_multi_strategy examples/demo_multi_strategy.cpp)
         target_link_libraries(demo_multi_strategy PRIVATE bitquant)
+
+        add_executable(demo_backtest_strategy examples/demo_backtest_strategy.cpp)
+        target_link_libraries(demo_backtest_strategy PRIVATE bitquant)
     endif()
 endif()
 
