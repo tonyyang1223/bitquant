@@ -144,6 +144,9 @@ if(BUILD_EXAMPLES)
         add_executable(demo_binance examples/demo_binance.cpp)
         target_link_libraries(demo_binance PRIVATE bitquant)
 
+        add_executable(demo_binance_spot examples/demo_binance_spot.cpp)
+        target_link_libraries(demo_binance_spot PRIVATE bitquant)
+
         add_executable(demo_exchange examples/demo_exchange.cpp)
         target_link_libraries(demo_exchange PRIVATE bitquant)
 

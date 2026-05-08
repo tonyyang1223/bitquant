@@ -92,28 +92,29 @@ bool BinanceSpotGateway::connect(const GatewayConfig& config) {
     ).count();
     connect_time_ *= 1000000;  // Format: YYMMDDHHMMSS * order_count
 
-    // Query exchange info
+    // Query exchange info (public API, no auth required)
     auto contracts = rest_api_->get_exchange_info();
     for (const auto& c : contracts) {
         contracts_[c.symbol] = c;
         if (contract_callback_) contract_callback_(c);
     }
 
-    // Query account
-    auto accounts = rest_api_->query_account_all();
-    for (const auto& a : accounts) {
-        if (account_callback_) account_callback_(a);
-    }
-
-    // Query open orders
-    auto orders = rest_api_->query_open_orders();
-    for (const auto& o : orders) {
-        orders_[o.orderid] = o;
-        if (order_callback_) order_callback_(o);
-    }
-
-    // Start user stream
+    // Query account and orders only if API key is provided
     if (!config.api_key.empty()) {
+        // Query account
+        auto accounts = rest_api_->query_account_all();
+        for (const auto& a : accounts) {
+            if (account_callback_) account_callback_(a);
+        }
+
+        // Query open orders
+        auto orders = rest_api_->query_open_orders();
+        for (const auto& o : orders) {
+            orders_[o.orderid] = o;
+            if (order_callback_) order_callback_(o);
+        }
+
+        // Start user stream
         start_user_stream();
     }
 
