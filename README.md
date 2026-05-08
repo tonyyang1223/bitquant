@@ -20,6 +20,51 @@ make -j$(nproc)
 ./bitquant_integration_tests
 ```
 
+### Binance Spot Gateway
+
+C++ 实现已支持币安现货交易：
+
+#### Features
+- **REST API**: ping, time, klines, price, exchange info
+- **Trading**: send_order, cancel_order, query_order
+- **Account**: query_account, query_open_orders
+- **User Data Stream**: 订单更新通过 WebSocket 实时推送
+
+#### Usage
+
+```cpp
+#include "exchange/binance_spot_gateway.hpp"
+
+bitquant::BinanceSpotGateway gateway;
+bitquant::GatewayConfig config;
+config.api_key = "your_api_key";
+config.api_secret = "your_api_secret";
+
+if (gateway.connect(config)) {
+    // 获取价格
+    double price = gateway.get_price("BTCUSDT");
+
+    // 下单
+    bitquant::OrderRequest req;
+    req.symbol = "BTCUSDT";
+    req.direction = bitquant::Direction::LONG;
+    req.type = bitquant::OrderType::LIMIT;
+    req.price = 50000.0;
+    req.volume = 0.001;
+
+    std::string order_id = gateway.send_order(req);
+}
+
+gateway.close();
+```
+
+#### Demo
+
+```bash
+cd bitquant_cpp/build
+./demo_binance_spot
+```
+
 ---
 
 ## 项目结构
