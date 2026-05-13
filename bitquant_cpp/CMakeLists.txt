@@ -23,6 +23,13 @@ option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
 option(BUILD_BENCHMARKS "Build benchmarks" OFF)
 option(ENABLE_BINANCE_API "Enable Binance API integration" ON)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+
+# Code coverage configuration
+if(ENABLE_COVERAGE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif()
 
 # Find dependencies
 find_package(TA-Lib REQUIRED)
@@ -38,6 +45,8 @@ add_library(bitquant
     src/core/types.cpp
     src/data/ring_buffer.cpp
     src/data/array_manager.cpp
+    src/data/bar_generator.cpp
+    src/database/sqlite_database.cpp
     src/engine/broker.cpp
     src/engine/strategy.cpp
     src/engine/event.cpp
@@ -45,12 +54,16 @@ add_library(bitquant
     src/engine/strategy_manager.cpp
     src/engine/strategy_context.cpp
     src/engine/trading_engine.cpp
+    src/engine/main_engine.cpp
+    src/engine/strategy_optimizer.cpp
     src/statistics/performance.cpp
     src/utils/datetime.cpp
     src/utils/logger.cpp
     src/utils/thread_pool.cpp
     src/config/config.cpp
     src/exchange/exchange_factory.cpp
+    src/strategy/builtin_strategies.cpp
+    src/strategy/validation_strategy.cpp
 )
 
 target_include_directories(bitquant
@@ -62,6 +75,7 @@ target_include_directories(bitquant
 target_link_libraries(bitquant
     PUBLIC
         TA-Lib::TA-Lib
+        sqlite3
 )
 
 # Binance API integration
@@ -103,6 +117,13 @@ if(ENABLE_BINANCE_API)
         src/exchange/binance_mapping.cpp
         src/exchange/binance_spot_rest_api.cpp
         src/exchange/binance_spot_gateway.cpp
+        src/exchange/binance_spot_ws_api.cpp
+        src/exchange/binance_usdt_gateway.cpp
+        src/exchange/binance_usdt_rest_api.cpp
+        src/exchange/binance_usdt_ws_api.cpp
+        src/exchange/okx_gateway.cpp
+        src/exchange/offset_converter.cpp
+        src/engine/paper_broker.cpp
     )
 
     target_link_libraries(bitquant PUBLIC binapi)
@@ -119,6 +140,179 @@ if(BUILD_TESTS)
     target_link_libraries(bitquant_integration_tests PRIVATE bitquant)
     add_test(NAME integration_tests COMMAND bitquant_integration_tests)
 
+    # Standalone unit tests (no GTest dependency)
+    add_executable(test_offset_converter
+        tests/unit/test_offset_converter_standalone.cpp
+    )
+    target_link_libraries(test_offset_converter PRIVATE bitquant)
+    add_test(NAME offset_converter_tests COMMAND test_offset_converter)
+
+    add_executable(test_inverse_contract
+        tests/unit/test_inverse_contract.cpp
+    )
+    target_link_libraries(test_inverse_contract PRIVATE bitquant)
+    add_test(NAME inverse_contract_tests COMMAND test_inverse_contract)
+
+    add_executable(test_sqlite_database
+        tests/unit/test_sqlite_database.cpp
+    )
+    target_link_libraries(test_sqlite_database PRIVATE bitquant)
+    add_test(NAME sqlite_database_tests COMMAND test_sqlite_database)
+
+    # BinanceSpotGateway tests
+    add_executable(test_binance_spot_gateway
+        tests/unit/test_binance_spot_gateway.cpp
+    )
+    target_link_libraries(test_binance_spot_gateway PRIVATE bitquant)
+    add_test(NAME binance_spot_gateway_tests COMMAND test_binance_spot_gateway)
+
+    # MainEngine tests
+    add_executable(test_main_engine
+        tests/unit/test_main_engine.cpp
+    )
+    target_link_libraries(test_main_engine PRIVATE bitquant)
+    add_test(NAME main_engine_tests COMMAND test_main_engine)
+
+    # StrategyManager tests
+    add_executable(test_strategy_manager
+        tests/unit/test_strategy_manager.cpp
+    )
+    target_link_libraries(test_strategy_manager PRIVATE bitquant)
+    add_test(NAME strategy_manager_tests COMMAND test_strategy_manager)
+
+    # WebSocketClient tests
+    add_executable(test_websocket_client
+        tests/unit/test_websocket_client.cpp
+    )
+    target_link_libraries(test_websocket_client PRIVATE bitquant)
+    add_test(NAME websocket_client_tests COMMAND test_websocket_client)
+
+    # PaperBroker tests
+    add_executable(test_paper_broker
+        tests/unit/test_paper_broker.cpp
+    )
+    target_link_libraries(test_paper_broker PRIVATE bitquant)
+    add_test(NAME paper_broker_tests COMMAND test_paper_broker)
+
+    # BinanceSpotRestApi tests
+    add_executable(test_binance_spot_rest_api
+        tests/unit/test_binance_spot_rest_api.cpp
+    )
+    target_link_libraries(test_binance_spot_rest_api PRIVATE bitquant)
+    add_test(NAME binance_spot_rest_api_tests COMMAND test_binance_spot_rest_api)
+
+    # BinanceSpotWsApi tests
+    add_executable(test_binance_spot_ws_api
+        tests/unit/test_binance_spot_ws_api.cpp
+    )
+    target_link_libraries(test_binance_spot_ws_api PRIVATE bitquant)
+    add_test(NAME binance_spot_ws_api_tests COMMAND test_binance_spot_ws_api)
+
+    # Strategy tests
+    add_executable(test_strategy
+        tests/unit/test_strategy.cpp
+    )
+    target_link_libraries(test_strategy PRIVATE bitquant)
+    add_test(NAME strategy_tests COMMAND test_strategy)
+
+    # BarGenerator tests
+    add_executable(test_bar_generator
+        tests/unit/test_bar_generator.cpp
+    )
+    target_link_libraries(test_bar_generator PRIVATE bitquant)
+    add_test(NAME bar_generator_tests COMMAND test_bar_generator)
+
+    # Types tests
+    add_executable(test_types
+        tests/unit/test_types.cpp
+    )
+    target_link_libraries(test_types PRIVATE bitquant)
+    add_test(NAME types_tests COMMAND test_types)
+
+    # StrategyContext tests
+    add_executable(test_strategy_context
+        tests/unit/test_strategy_context.cpp
+    )
+    target_link_libraries(test_strategy_context PRIVATE bitquant)
+    add_test(NAME strategy_context_tests COMMAND test_strategy_context)
+
+    # DateTime tests
+    add_executable(test_datetime
+        tests/unit/test_datetime.cpp
+    )
+    target_link_libraries(test_datetime PRIVATE bitquant)
+    add_test(NAME datetime_tests COMMAND test_datetime)
+
+    # Logger tests
+    add_executable(test_logger
+        tests/unit/test_logger.cpp
+    )
+    target_link_libraries(test_logger PRIVATE bitquant)
+    add_test(NAME logger_tests COMMAND test_logger)
+
+    # ThreadPool tests
+    add_executable(test_thread_pool
+        tests/unit/test_thread_pool.cpp
+    )
+    target_link_libraries(test_thread_pool PRIVATE bitquant)
+    add_test(NAME thread_pool_tests COMMAND test_thread_pool)
+
+    # Config tests
+    add_executable(test_config
+        tests/unit/test_config.cpp
+    )
+    target_link_libraries(test_config PRIVATE bitquant)
+    add_test(NAME config_tests COMMAND test_config)
+
+    # ExchangeFactory tests
+    add_executable(test_exchange_factory
+        tests/unit/test_exchange_factory.cpp
+    )
+    target_link_libraries(test_exchange_factory PRIVATE bitquant)
+    add_test(NAME exchange_factory_tests COMMAND test_exchange_factory)
+
+    # BinanceGateway tests
+    add_executable(test_binance_gateway
+        tests/unit/test_binance_gateway.cpp
+    )
+    target_link_libraries(test_binance_gateway PRIVATE bitquant)
+    add_test(NAME binance_gateway_tests COMMAND test_binance_gateway)
+
+    # BinanceUsdtGateway tests
+    add_executable(test_binance_usdt_gateway
+        tests/unit/test_binance_usdt_gateway.cpp
+    )
+    target_link_libraries(test_binance_usdt_gateway PRIVATE bitquant)
+    add_test(NAME binance_usdt_gateway_tests COMMAND test_binance_usdt_gateway)
+
+    # BinanceUsdtRestApi tests
+    add_executable(test_binance_usdt_rest_api
+        tests/unit/test_binance_usdt_rest_api.cpp
+    )
+    target_link_libraries(test_binance_usdt_rest_api PRIVATE bitquant)
+    add_test(NAME binance_usdt_rest_api_tests COMMAND test_binance_usdt_rest_api)
+
+    # BinanceUsdtWsApi tests
+    add_executable(test_binance_usdt_ws_api
+        tests/unit/test_binance_usdt_ws_api.cpp
+    )
+    target_link_libraries(test_binance_usdt_ws_api PRIVATE bitquant)
+    add_test(NAME binance_usdt_ws_api_tests COMMAND test_binance_usdt_ws_api)
+
+    # BinanceApiClient tests
+    add_executable(test_binance_api
+        tests/unit/test_binance_api.cpp
+    )
+    target_link_libraries(test_binance_api PRIVATE bitquant)
+    add_test(NAME binance_api_tests COMMAND test_binance_api)
+
+    # ValidationStrategy tests
+    add_executable(test_validation_strategy
+        tests/unit/test_validation_strategy.cpp
+    )
+    target_link_libraries(test_validation_strategy PRIVATE bitquant)
+    add_test(NAME validation_strategy_tests COMMAND test_validation_strategy)
+
     find_package(GTest QUIET)
     if(GTest_FOUND)
         add_executable(bitquant_tests
@@ -126,6 +320,7 @@ if(BUILD_TESTS)
             tests/unit/test_array_manager.cpp
             tests/unit/test_broker.cpp
             tests/unit/test_binance_mapping.cpp
+            tests/unit/test_offset_converter.cpp
         )
         target_link_libraries(bitquant_tests PRIVATE bitquant GTest::gtest GTest::gtest_main)
         include(GoogleTest)
@@ -139,6 +334,12 @@ endif()
 if(BUILD_EXAMPLES)
     add_executable(demo_strategy examples/demo_strategy.cpp)
     target_link_libraries(demo_strategy PRIVATE bitquant)
+
+    add_executable(demo_bar_generator examples/demo_bar_generator.cpp)
+    target_link_libraries(demo_bar_generator PRIVATE bitquant)
+
+    add_executable(demo_database examples/demo_database.cpp)
+    target_link_libraries(demo_database PRIVATE bitquant)
 
     if(ENABLE_BINANCE_API)
         add_executable(demo_binance examples/demo_binance.cpp)
@@ -155,6 +356,18 @@ if(BUILD_EXAMPLES)
 
         add_executable(demo_backtest_strategy examples/demo_backtest_strategy.cpp)
         target_link_libraries(demo_backtest_strategy PRIVATE bitquant)
+
+        add_executable(demo_main_engine examples/demo_main_engine.cpp)
+        target_link_libraries(demo_main_engine PRIVATE bitquant)
+
+        add_executable(demo_paper_trading examples/demo_paper_trading.cpp)
+        target_link_libraries(demo_paper_trading PRIVATE bitquant)
+
+        add_executable(test_websocket_real examples/test_websocket_real.cpp)
+        target_link_libraries(test_websocket_real PRIVATE bitquant)
+
+        add_executable(demo_paper_trading_full examples/demo_paper_trading_full.cpp)
+        target_link_libraries(demo_paper_trading_full PRIVATE bitquant)
     endif()
 endif()
 

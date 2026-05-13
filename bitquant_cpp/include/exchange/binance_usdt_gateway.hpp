@@ -1,21 +1,22 @@
 /**
- * @file binance_spot_gateway.hpp
- * @brief Binance Spot Gateway
+ * @file binance_usdt_gateway.hpp
+ * @brief Binance USDT-M Futures Gateway
  *
- * Implements IExchange interface for Binance Spot trading.
- * Coordinates REST API and WebSocket connections.
+ * Implements IExchange interface for Binance USDT-M perpetual futures trading.
+ * Based on howtrader's BinanceUsdtGateway design.
  *
- * Following Python howtrader design:
+ * Features:
+ * - USDT-margined perpetual futures
+ * - One-way position mode
  * - REST API for trading and queries
- * - Trade WebSocket for user data (order updates)
- * - Data WebSocket for market data (tick/bar)
+ * - WebSocket for real-time data
  */
 
 #pragma once
 
 #include "exchange/i_exchange.hpp"
-#include "exchange/binance_spot_rest_api.hpp"
-#include "exchange/binance_spot_ws_api.hpp"
+#include "exchange/binance_usdt_rest_api.hpp"
+#include "exchange/binance_usdt_ws_api.hpp"
 #include "core/types.hpp"
 #include <string>
 #include <vector>
@@ -28,27 +29,26 @@
 namespace bitquant {
 
 /**
- * @brief Binance Spot Gateway
+ * @brief Binance USDT-M Futures Gateway
  *
- * Implements IExchange interface for Binance Spot trading.
- * Coordinates REST API and WebSocket connections.
- *
- * Following Python howtrader design:
- * - REST API for trading and queries
- * - Trade WebSocket for user data (order updates)
- * - Data WebSocket for market data (tick/bar)
+ * Implements IExchange interface for Binance USDT-M perpetual futures.
+ * Key differences from Spot:
+ * - Uses /fapi/* endpoints (futures API)
+ * - Supports leverage and margin
+ * - Position-based trading
+ * - Funding rate
  */
-class BinanceSpotGateway : public IExchange {
+class BinanceUsdtGateway : public IExchange {
 public:
-    BinanceSpotGateway();
-    explicit BinanceSpotGateway(const std::string& gateway_name);
-    ~BinanceSpotGateway() override;
+    BinanceUsdtGateway();
+    explicit BinanceUsdtGateway(const std::string& gateway_name);
+    ~BinanceUsdtGateway() override;
 
     //=========================================================================
     // IExchange Interface
     //=========================================================================
 
-    std::string name() const override { return "BinanceSpot"; }
+    std::string name() const override { return "BinanceUsdt"; }
     Exchange exchange() const override { return Exchange::BINANCE; }
     std::string gateway_name() const override { return gateway_name_; }
 
@@ -60,11 +60,11 @@ public:
         return {
             .market_data = true,
             .trading = true,
-            .stop_order = false,
+            .stop_order = true,      // Futures support stop orders
             .history_data = true,
             .websocket = true,
-            .margin = false,
-            .futures = false,
+            .margin = true,          // Margin trading
+            .futures = true,         // Futures trading
             .options = false
         };
     }
@@ -74,7 +74,6 @@ public:
     //=========================================================================
 
     bool connect(const std::string& config) override;
-    bool connect(const GatewayConfig& config);
     void close() override;
     bool is_connected() const override;
 
@@ -113,79 +112,70 @@ public:
     std::vector<OrderData> query_open_orders(const std::string& symbol = "") override;
 
     //=========================================================================
+    // Futures-specific Methods
+    //=========================================================================
+
+    /**
+     * @brief Set leverage for symbol
+     */
+    bool set_leverage(const std::string& symbol, int leverage);
+
+    /**
+     * @brief Query funding rate
+     */
+    struct FundingRate {
+        std::string symbol;
+        double funding_rate = 0.0;
+        int64_t next_funding_time = 0;
+    };
+    std::vector<FundingRate> query_funding_rate();
+
+    /**
+     * @brief Get position for symbol
+     */
+    std::optional<PositionData> get_position(const std::string& symbol);
+
+    //=========================================================================
     // Utility
     //=========================================================================
 
-    /**
-     * @brief Get server time
-     */
     int64_t get_server_time();
-
-    /**
-     * @brief Check connectivity (ping)
-     */
     bool ping();
-
-    /**
-     * @brief Get exchange info (contracts)
-     */
     std::vector<ContractData> get_exchange_info();
-
-    /**
-     * @brief Query account balances
-     */
-    std::vector<AccountData> query_account_all();
-
-    /**
-     * @brief Start user data stream
-     */
-    bool start_user_stream();
-
-    /**
-     * @brief Keep user data stream alive
-     */
-    void keep_user_stream();
-
-    /**
-     * @brief Get last error message
-     */
     const std::string& last_error() const { return last_error_; }
 
     //=========================================================================
-    // WebSocket Data Processing (called by BinanceSpotWsApi)
+    // WebSocket Data Processing
     //=========================================================================
 
-    /**
-     * @brief Process order update from WebSocket
-     * Called by BinanceSpotWsApi when order update received
-     */
     void process_order_update(const OrderData& order);
-
-    /**
-     * @brief Process account update from WebSocket
-     */
     void process_account_update(const AccountData& account);
+    void process_position_update(const PositionData& position);
 
 private:
-    //=========================================================================
-    // Internal
-    //=========================================================================
-
     std::string generate_order_id();
+    void init_rest_api();
+    void init_ws_api();
 
     //=========================================================================
     // Members
     //=========================================================================
 
-    std::unique_ptr<BinanceSpotRestApi> rest_api_;
-    std::unique_ptr<BinanceSpotWsApi> ws_api_;
-    std::string gateway_name_ = "BINANCE_SPOT";
+    // REST and WebSocket APIs
+    std::unique_ptr<BinanceUsdtRestApi> rest_api_;
+    std::unique_ptr<BinanceUsdtWsApi> ws_api_;
+    std::unique_ptr<BinanceUsdtUserWsApi> user_ws_api_;
+    std::string gateway_name_ = "BINANCE_USDT";
     std::atomic<bool> connected_{false};
     std::string last_error_;
 
-    // Order tracking (for Trade generation)
+    // Order tracking
     std::unordered_map<std::string, OrderData> orders_;
     std::mutex orders_mutex_;
+
+    // Position tracking
+    std::unordered_map<std::string, PositionData> positions_;
+    std::mutex positions_mutex_;
 
     // Contract cache
     std::unordered_map<std::string, ContractData> contracts_;

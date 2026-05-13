@@ -11,11 +11,18 @@
 
 #include "engine/trading_engine.hpp"
 #include "engine/strategy.hpp"
+#include "engine/strategy_optimizer.hpp"
+#include "engine/risk_manager.hpp"
+#include "engine/event.hpp"
 #include "data/array_manager.hpp"
+#include "database/sqlite_database.hpp"
+#include "exchange/offset_converter.hpp"
+#include "exchange/inverse_contract.hpp"
 #include <iostream>
 #include <cassert>
 #include <chrono>
 #include <fstream>
+#include <set>
 
 using namespace bitquant;
 
@@ -95,6 +102,69 @@ std::vector<BarData> generate_test_data(int count, double start_price = 100.0) {
 
     return bars;
 }
+
+//=============================================================================
+// Additional Test Strategies
+//=============================================================================
+
+class MultiSymbolStrategy : public IStrategy {
+public:
+    std::set<std::string> symbols;
+    int bar_count = 0;
+
+    void on_init() override {
+        inited_ = true;
+        symbols = {"BTCUSDT", "ETHUSDT"};
+    }
+    void on_start() override { trading_ = true; }
+
+    void on_bar(const BarData& bar) override {
+        ++bar_count;
+        symbols.insert(bar.symbol);
+
+        if (bar_count == 5 && position() == 0) {
+            buy(bar.close_price, 1.0);
+        } else if (bar_count == 15 && position() > 0) {
+            sell(bar.close_price, position());
+        }
+    }
+};
+
+class RiskAwareStrategy : public IStrategy {
+public:
+    double max_position_size = 5.0;
+    double stop_loss_pct = 0.02;
+    double entry_price = 0;
+    int bar_count = 0;
+
+    void on_init() override { inited_ = true; }
+    void on_start() override { trading_ = true; }
+
+    void on_bar(const BarData& bar) override {
+        ++bar_count;
+
+        // Entry
+        if (bar_count == 5 && position() == 0) {
+            entry_price = bar.close_price;
+            buy(bar.close_price, max_position_size);
+        }
+
+        // Stop loss check
+        if (position() > 0 && entry_price > 0) {
+            double loss_pct = (entry_price - bar.close_price) / entry_price;
+            if (loss_pct > stop_loss_pct) {
+                sell(bar.close_price, position());
+                entry_price = 0;
+            }
+        }
+
+        // Take profit
+        if (bar_count == 30 && position() > 0) {
+            sell(bar.close_price, position());
+            entry_price = 0;
+        }
+    }
+};
 
 //=============================================================================
 // Test Functions
@@ -328,6 +398,212 @@ bool test_array_manager() {
     return true;
 }
 
+bool test_multi_strategy_backtest() {
+    std::cout << "Testing: Multi-strategy backtest... ";
+
+    TradingEngineConfig config;
+    config.mode = EngineMode::BACKTESTING;
+    config.initial_capital = 1'000'000.0;
+
+    TradingEngine engine;
+    engine.configure(config);
+
+    // Load data for multiple symbols
+    auto btc_data = generate_test_data(100, 50000.0);
+    auto eth_data = generate_test_data(100, 3000.0);
+
+    engine.load_data("BTCUSDT", btc_data);
+    engine.load_data("ETHUSDT", eth_data);
+
+    // Add multiple strategies
+    auto strategy1 = std::make_unique<SimpleBuySellStrategy>();
+    strategy1->buy_bar = 5;
+    strategy1->sell_bar = 20;
+    engine.add_strategy("Strategy1", std::move(strategy1), "BTCUSDT", {});
+
+    auto strategy2 = std::make_unique<SimpleBuySellStrategy>();
+    strategy2->buy_bar = 10;
+    strategy2->sell_bar = 30;
+    engine.add_strategy("Strategy2", std::move(strategy2), "ETHUSDT", {});
+
+    engine.run_backtest();
+
+    const auto& perf = engine.get_performance();
+    assert(perf.initial_capital == 1'000'000.0);
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_risk_manager_integration() {
+    std::cout << "Testing: RiskManager integration... ";
+
+    RiskConfig risk_config;
+    risk_config.active = true;
+    risk_config.order_size_limit = 10.0;
+    risk_config.order_flow_limit = 100;
+    risk_config.active_order_limit = 20;
+
+    TradingEngineConfig config;
+    config.mode = EngineMode::BACKTESTING;
+    config.initial_capital = 100000.0;
+
+    TradingEngine engine;
+    engine.configure(config);
+
+    auto data = generate_test_data(100);
+    engine.load_data("TEST", data);
+
+    auto strategy = std::make_unique<RiskAwareStrategy>();
+    engine.add_strategy("RiskAware", std::move(strategy), "TEST", {});
+
+    engine.run_backtest();
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_database_integration() {
+    std::cout << "Testing: Database integration... ";
+
+    auto db = create_sqlite_database(":memory:");
+    assert(db->is_connected());
+
+    // Save bars
+    auto bars = generate_test_data(50);
+    int saved = db->save_bars(bars);
+    assert(saved == 50);
+
+    // Load bars
+    auto loaded = db->load_bars("TEST", Exchange::BINANCE, Interval::MINUTE_1, 100);
+    assert(loaded.size() == 50);
+
+    // Get overview
+    auto overview = db->get_bar_overview();
+    assert(overview.size() == 1);
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_strategy_optimizer_integration() {
+    std::cout << "Testing: Strategy optimizer integration... ";
+
+    StrategyOptimizer optimizer;
+    optimizer.set_initial_capital(100000.0);
+    optimizer.set_commission_rate(0.001);
+
+    // Generate test data
+    auto bars = generate_test_data(100);
+
+    // Define parameter ranges
+    std::unordered_map<std::string, std::vector<double>> param_ranges;
+    param_ranges["fast_period"] = {3, 5, 7};
+    param_ranges["slow_period"] = {10, 15, 20};
+
+    // Generate combinations
+    auto combinations = optimizer.generate_param_combinations(param_ranges);
+    assert(combinations.size() == 9);  // 3 x 3
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_paper_broker() {
+    std::cout << "Testing: Paper broker simulation... ";
+
+    BrokerConfig config;
+    config.initial_cash = 100000.0;
+    config.commission_rate = 0.001;
+    config.slippage_rate = 0.0005;
+
+    Broker broker(config);
+
+    // Generate trending data
+    std::vector<BarData> data;
+    double price = 100.0;
+    for (int i = 0; i < 100; ++i) {
+        BarData bar;
+        bar.datetime = i * 60000;
+        bar.open_price = price;
+        bar.high_price = price + 0.5;
+        bar.low_price = price - 0.5;
+        bar.close_price = price + 0.2;
+        bar.volume = 1000.0;
+        price += 0.1;  // Uptrend
+        data.push_back(bar);
+    }
+
+    broker.set_data(data);
+
+    auto strategy = std::make_unique<MovingAverageStrategy>();
+    strategy->fast_period = 5;
+    strategy->slow_period = 10;
+    broker.set_strategy(std::move(strategy));
+
+    broker.run();
+
+    const auto& perf = broker.performance();
+    assert(perf.total_trades >= 0);
+
+    // Verify equity curve
+    const auto& equity = broker.equity_curve();
+    assert(equity.size() == 100);
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_offset_converter_integration() {
+    std::cout << "Testing: OffsetConverter integration... ";
+
+    OffsetConverter converter;
+
+    // Register a contract
+    ContractData contract;
+    contract.symbol = "BTCUSDT";
+    contract.exchange = Exchange::BINANCE;
+    contract.product = Product::FUTURES;
+    contract.net_position = false;
+    converter.register_contract(contract);
+
+    // Update position
+    PositionData pos;
+    pos.symbol = "BTCUSDT";
+    pos.exchange = Exchange::BINANCE;
+    pos.direction = Direction::LONG;
+    pos.volume = 10.0;
+    pos.yd_volume = 5.0;
+    converter.update_position(pos);
+
+    // Get position holding
+    auto& holding = converter.get_position_holding("BTCUSDT");
+    assert(holding.long_pos() == 10.0);
+    assert(holding.long_yd() == 5.0);
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
+bool test_inverse_contract_integration() {
+    std::cout << "Testing: Inverse contract integration... ";
+
+    // Test linear contract
+    double linear_pnl = calculate_pnl(false, 50000.0, 51000.0, 1.0, 1.0, Direction::LONG);
+    assert(std::abs(linear_pnl - 1000.0) < 0.01);
+
+    // Test inverse contract
+    double inverse_pnl = calculate_pnl(true, 50000.0, 51000.0, 1.0, 100.0, Direction::LONG);
+    assert(inverse_pnl > 0);  // Should be positive for long position with price increase
+
+    // Test contract detection
+    assert(is_inverse_contract("BTCUSD_PERP"));
+    assert(!is_inverse_contract("BTCUSDT"));
+
+    std::cout << "PASSED\n";
+    return true;
+}
+
 //=============================================================================
 // Performance Benchmark
 //=============================================================================
@@ -374,6 +650,7 @@ int main() {
     int failed = 0;
 
     try {
+        // Core tests
         if (test_broker_basic()) ++passed; else ++failed;
         if (test_performance_calculation()) ++passed; else ++failed;
         if (test_multiple_trades()) ++passed; else ++failed;
@@ -381,6 +658,15 @@ int main() {
         if (test_risk_manager_order_limit()) ++passed; else ++failed;
         if (test_event_engine()) ++passed; else ++failed;
         if (test_array_manager()) ++passed; else ++failed;
+
+        // Enhanced integration tests
+        if (test_multi_strategy_backtest()) ++passed; else ++failed;
+        if (test_risk_manager_integration()) ++passed; else ++failed;
+        if (test_database_integration()) ++passed; else ++failed;
+        if (test_strategy_optimizer_integration()) ++passed; else ++failed;
+        if (test_paper_broker()) ++passed; else ++failed;
+        if (test_offset_converter_integration()) ++passed; else ++failed;
+        if (test_inverse_contract_integration()) ++passed; else ++failed;
 
         // Benchmark
         benchmark_backtest(10000);

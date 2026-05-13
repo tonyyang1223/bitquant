@@ -78,6 +78,21 @@ public:
     double get_best_ask() const;
 
     /**
+     * @brief Get bid order count
+     */
+    size_t bid_count() const { return bid_prices_.size(); }
+
+    /**
+     * @brief Get ask order count
+     */
+    size_t ask_count() const { return ask_prices_.size(); }
+
+    /**
+     * @brief Get total order count
+     */
+    size_t total_count() const { return bid_prices_.size() + ask_prices_.size(); }
+
+    /**
      * @brief Clear all orders
      */
     void clear();

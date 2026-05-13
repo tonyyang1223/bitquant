@@ -1,21 +1,21 @@
 /**
- * @file binance_spot_gateway.hpp
- * @brief Binance Spot Gateway
+ * @file okx_gateway.hpp
+ * @brief OKX Exchange Gateway
  *
- * Implements IExchange interface for Binance Spot trading.
- * Coordinates REST API and WebSocket connections.
+ * Implements IExchange interface for OKX trading.
+ * Based on howtrader's OkxGateway design.
  *
- * Following Python howtrader design:
- * - REST API for trading and queries
- * - Trade WebSocket for user data (order updates)
- * - Data WebSocket for market data (tick/bar)
+ * Features:
+ * - Spot, Margin, and Futures trading
+ * - REST API and WebSocket support
+ * - Single currency margin mode
+ * - Cross margin mode
+ * - One-way position mode
  */
 
 #pragma once
 
 #include "exchange/i_exchange.hpp"
-#include "exchange/binance_spot_rest_api.hpp"
-#include "exchange/binance_spot_ws_api.hpp"
 #include "core/types.hpp"
 #include <string>
 #include <vector>
@@ -28,43 +28,38 @@
 namespace bitquant {
 
 /**
- * @brief Binance Spot Gateway
+ * @brief OKX Gateway
  *
- * Implements IExchange interface for Binance Spot trading.
- * Coordinates REST API and WebSocket connections.
- *
- * Following Python howtrader design:
- * - REST API for trading and queries
- * - Trade WebSocket for user data (order updates)
- * - Data WebSocket for market data (tick/bar)
+ * Implements IExchange interface for OKX exchange.
+ * Supports Spot, Swap (perpetual), and Futures trading.
  */
-class BinanceSpotGateway : public IExchange {
+class OkxGateway : public IExchange {
 public:
-    BinanceSpotGateway();
-    explicit BinanceSpotGateway(const std::string& gateway_name);
-    ~BinanceSpotGateway() override;
+    OkxGateway();
+    explicit OkxGateway(const std::string& gateway_name);
+    ~OkxGateway() override;
 
     //=========================================================================
     // IExchange Interface
     //=========================================================================
 
-    std::string name() const override { return "BinanceSpot"; }
-    Exchange exchange() const override { return Exchange::BINANCE; }
+    std::string name() const override { return "OKX"; }
+    Exchange exchange() const override { return Exchange::OKX; }
     std::string gateway_name() const override { return gateway_name_; }
 
     std::vector<Exchange> supported_exchanges() const override {
-        return { Exchange::BINANCE };
+        return { Exchange::OKX };
     }
 
     ExchangeCapabilities capabilities() const override {
         return {
             .market_data = true,
             .trading = true,
-            .stop_order = false,
+            .stop_order = true,
             .history_data = true,
             .websocket = true,
-            .margin = false,
-            .futures = false,
+            .margin = true,
+            .futures = true,
             .options = false
         };
     }
@@ -74,7 +69,6 @@ public:
     //=========================================================================
 
     bool connect(const std::string& config) override;
-    bool connect(const GatewayConfig& config);
     void close() override;
     bool is_connected() const override;
 
@@ -116,76 +110,48 @@ public:
     // Utility
     //=========================================================================
 
-    /**
-     * @brief Get server time
-     */
     int64_t get_server_time();
-
-    /**
-     * @brief Check connectivity (ping)
-     */
     bool ping();
-
-    /**
-     * @brief Get exchange info (contracts)
-     */
-    std::vector<ContractData> get_exchange_info();
-
-    /**
-     * @brief Query account balances
-     */
-    std::vector<AccountData> query_account_all();
-
-    /**
-     * @brief Start user data stream
-     */
-    bool start_user_stream();
-
-    /**
-     * @brief Keep user data stream alive
-     */
-    void keep_user_stream();
-
-    /**
-     * @brief Get last error message
-     */
+    std::vector<ContractData> get_instruments(const std::string& inst_type = "SPOT");
     const std::string& last_error() const { return last_error_; }
 
     //=========================================================================
-    // WebSocket Data Processing (called by BinanceSpotWsApi)
+    // WebSocket Data Processing
     //=========================================================================
 
-    /**
-     * @brief Process order update from WebSocket
-     * Called by BinanceSpotWsApi when order update received
-     */
     void process_order_update(const OrderData& order);
-
-    /**
-     * @brief Process account update from WebSocket
-     */
     void process_account_update(const AccountData& account);
+    void process_position_update(const PositionData& position);
+    void process_tick_update(const TickData& tick);
 
 private:
-    //=========================================================================
-    // Internal
-    //=========================================================================
-
     std::string generate_order_id();
+    std::string generate_signature(const std::string& timestamp,
+                                    const std::string& method,
+                                    const std::string& request_path,
+                                    const std::string& body);
 
     //=========================================================================
     // Members
     //=========================================================================
 
-    std::unique_ptr<BinanceSpotRestApi> rest_api_;
-    std::unique_ptr<BinanceSpotWsApi> ws_api_;
-    std::string gateway_name_ = "BINANCE_SPOT";
+    std::string gateway_name_ = "OKX";
     std::atomic<bool> connected_{false};
     std::string last_error_;
 
-    // Order tracking (for Trade generation)
+    // API credentials
+    std::string api_key_;
+    std::string api_secret_;
+    std::string passphrase_;
+    bool testnet_ = false;
+
+    // Order tracking
     std::unordered_map<std::string, OrderData> orders_;
     std::mutex orders_mutex_;
+
+    // Position tracking
+    std::unordered_map<std::string, PositionData> positions_;
+    std::mutex positions_mutex_;
 
     // Contract cache
     std::unordered_map<std::string, ContractData> contracts_;
@@ -195,13 +161,13 @@ private:
     int order_count_ = 0;
     std::mutex order_mutex_;
 
-    // User stream
-    std::string listen_key_;
-    std::atomic<int> keep_alive_count_{0};
-
     // Tick cache
     std::unordered_map<std::string, TickData> last_ticks_;
     std::mutex ticks_mutex_;
+
+    // WebSocket thread
+    std::thread ws_thread_;
+    std::atomic<bool> ws_running_{false};
 };
 
 } // namespace bitquant

@@ -7,6 +7,7 @@
 
 #include "engine/strategy_manager.hpp"
 #include "engine/broker.hpp"
+#include "engine/paper_broker.hpp"
 #include "engine/risk_manager.hpp"
 #include <algorithm>
 #include <iostream>
@@ -377,6 +378,7 @@ std::string StrategyManager::send_order(
 
     StrategyWrapper* wrapper = get_wrapper(strategy_name);
     if (!wrapper || !wrapper->trading) {
+        write_log("Strategy " + strategy_name + " not found or not trading");
         return "";
     }
 
@@ -396,9 +398,59 @@ std::string StrategyManager::send_order(
     orderid_strategy_map_[vt_orderid] = strategy_name;
     wrapper->active_orderids.insert(vt_orderid);
 
-    // TODO: Send to broker/exchange
-    // For now, just return the order ID
-    write_log("Order sent: " + vt_orderid + " for " + strategy_name);
+    // Send to broker (PaperBroker for paper trading, Broker for backtesting)
+    std::string broker_orderid;
+
+    if (paper_broker_) {
+        // Paper trading mode
+        OrderRequest broker_req = req;
+        broker_req.reference = vt_orderid;  // Link strategy order to broker order
+        broker_orderid = paper_broker_->send_order(broker_req);
+
+        if (broker_orderid.empty()) {
+            write_log("Failed to send order to paper broker for strategy: " + strategy_name);
+            orderid_strategy_map_.erase(vt_orderid);
+            wrapper->active_orderids.erase(vt_orderid);
+            return "";
+        }
+
+        write_log("Order sent to paper broker: " + vt_orderid + " -> " + broker_orderid);
+
+    } else if (broker_) {
+        // Backtesting mode - use Broker's buy/sell/short/cover methods
+        order_id_t id = 0;
+        if (req.direction == Direction::LONG) {
+            if (req.price > 0) {
+                id = broker_->buy(req.price, req.volume);
+            } else {
+                id = broker_->market_buy(req.volume);
+            }
+        } else {
+            if (req.price > 0) {
+                id = broker_->short_order(req.price, req.volume);
+            } else {
+                id = broker_->market_sell(req.volume);
+            }
+        }
+        broker_orderid = std::to_string(id);
+
+        if (broker_orderid == "0") {
+            write_log("Failed to send order to broker for strategy: " + strategy_name);
+            orderid_strategy_map_.erase(vt_orderid);
+            wrapper->active_orderids.erase(vt_orderid);
+            return "";
+        }
+
+        write_log("Order sent to broker: " + vt_orderid + " -> " + broker_orderid);
+    } else {
+        write_log("No broker configured for strategy: " + strategy_name);
+        orderid_strategy_map_.erase(vt_orderid);
+        wrapper->active_orderids.erase(vt_orderid);
+        return "";
+    }
+
+    // Store broker order ID mapping
+    orderid_strategy_map_[broker_orderid] = strategy_name;
 
     return vt_orderid;
 }
@@ -421,8 +473,19 @@ void StrategyManager::cancel_order(
         return;
     }
 
-    // TODO: Send cancel to broker/exchange
-    write_log("Order cancelled: " + vt_orderid + " for " + strategy_name);
+    // Cancel at broker
+    if (paper_broker_) {
+        paper_broker_->cancel_order(vt_orderid);
+        write_log("Order cancelled at paper broker: " + vt_orderid);
+    } else if (broker_) {
+        try {
+            order_id_t id = std::stoull(vt_orderid);
+            broker_->cancel_order(id);
+            write_log("Order cancelled at broker: " + vt_orderid);
+        } catch (...) {
+            write_log("Invalid order ID for cancel: " + vt_orderid);
+        }
+    }
 
     // Remove from active orders
     wrapper->active_orderids.erase(vt_orderid);

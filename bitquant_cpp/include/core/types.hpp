@@ -135,6 +135,40 @@ inline bool is_active_status(Status status) {
 }
 
 //=============================================================================
+// Enum Conversion Functions
+//=============================================================================
+
+/**
+ * @brief Convert Exchange enum to string
+ */
+std::string exchange_to_string(Exchange exchange);
+
+/**
+ * @brief Convert string to Exchange enum
+ */
+Exchange exchange_from_string(const std::string& str);
+
+/**
+ * @brief Convert Interval enum to string
+ */
+std::string interval_to_string(Interval interval);
+
+/**
+ * @brief Convert string to Interval enum
+ */
+Interval interval_from_string(const std::string& str);
+
+/**
+ * @brief Convert Direction enum to string
+ */
+std::string direction_to_string(Direction direction);
+
+/**
+ * @brief Convert string to Direction enum
+ */
+Direction direction_from_string(const std::string& str);
+
+//=============================================================================
 // Data Structures (Based on howtrader/trader/object.py)
 //=============================================================================
 
@@ -368,9 +402,24 @@ struct ContractData {
     bool net_position = false;
     bool history_data = false;
 
+    // Futures-specific fields
+    bool inverse = false;           // 是否为反向合约（币本位）
+    double contract_size = 1.0;     // 合约面值（反向合约使用）
+    std::string settlement_currency; // 结算货币（如 "BTC", "USDT"）
+
     std::string vt_symbol() const {
         return symbol + "." + std::to_string(static_cast<int>(exchange));
     }
+};
+
+/**
+ * @brief Log data structure
+ */
+struct LogData {
+    std::string msg;
+    std::string gateway_name;
+    int64_t datetime = 0;
+    int level = 0;  // 0=INFO, 1=WARNING, 2=ERROR
 };
 
 //=============================================================================

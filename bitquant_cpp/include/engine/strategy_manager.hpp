@@ -30,6 +30,7 @@ namespace bitquant {
 //=============================================================================
 
 class Broker;
+class PaperBroker;
 class RiskManager;
 
 //=============================================================================
@@ -272,6 +273,7 @@ public:
     //=========================================================================
 
     void set_broker(Broker* broker) { broker_ = broker; }
+    void set_paper_broker(PaperBroker* paper_broker) { paper_broker_ = paper_broker; }
     void set_event_engine(EventEngine* engine) { event_engine_ = engine; }
     void set_risk_manager(RiskManager* rm) { risk_manager_ = rm; }
 
@@ -297,6 +299,7 @@ private:
     //=========================================================================
 
     Broker* broker_ = nullptr;
+    PaperBroker* paper_broker_ = nullptr;
     EventEngine* event_engine_ = nullptr;
     RiskManager* risk_manager_ = nullptr;
 

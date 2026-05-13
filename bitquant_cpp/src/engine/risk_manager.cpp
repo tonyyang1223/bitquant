@@ -96,11 +96,19 @@ bool RiskManager::check_risk(const OrderRequest& req, const std::string& gateway
     }
 
     // 5. Check active order limit
-    // TODO: Implement with proper active order count from MainEngine
-    // int active_order_count = ...
+    std::string vt_symbol = req.vt_symbol();
+    ActiveOrderBook& order_book = get_order_book(vt_symbol);
+    int active_bid_count = static_cast<int>(order_book.bid_count());
+    int active_ask_count = static_cast<int>(order_book.ask_count());
+    int active_order_count = active_bid_count + active_ask_count;
+
+    if (active_order_count >= config_.active_order_limit) {
+        write_log("活跃委托数量" + std::to_string(active_order_count) +
+                  "，超过限制" + std::to_string(config_.active_order_limit));
+        return false;
+    }
 
     // 6. Check order cancel limit
-    std::string vt_symbol = req.vt_symbol();
     int cancel_count = order_cancel_counts_.count(vt_symbol) ?
                        order_cancel_counts_[vt_symbol] : 0;
     if (cancel_count >= config_.order_cancel_limit) {
@@ -111,8 +119,6 @@ bool RiskManager::check_risk(const OrderRequest& req, const std::string& gateway
 
     // 7. Check self-trade prevention (Based on howtrader's logic)
     if (config_.prevent_self_trade) {
-        ActiveOrderBook& order_book = get_order_book(vt_symbol);
-
         if (req.direction == Direction::LONG) {
             double best_ask = order_book.get_best_ask();
             if (best_ask > 0 && req.price >= best_ask) {
