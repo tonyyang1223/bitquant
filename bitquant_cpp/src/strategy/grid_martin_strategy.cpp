@@ -5,7 +5,6 @@
 
 #include "strategy/grid_martin_strategy.hpp"
 #include "utils/logger.hpp"
-#include <cmath>
 #include <algorithm>
 
 namespace bitquant {
