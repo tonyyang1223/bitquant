@@ -376,6 +376,9 @@ if(BUILD_EXAMPLES)
 
         add_executable(demo_paper_trading_full examples/demo_paper_trading_full.cpp)
         target_link_libraries(demo_paper_trading_full PRIVATE bitquant)
+
+        add_executable(demo_grid_martin examples/demo_grid_martin.cpp)
+        target_link_libraries(demo_grid_martin PRIVATE bitquant)
     endif()
 endif()
 
