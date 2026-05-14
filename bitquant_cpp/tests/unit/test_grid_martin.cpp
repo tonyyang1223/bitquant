@@ -73,12 +73,77 @@ int test_get_grid_index() {
     return 0;
 }
 
+int test_grid_crossing_buy() {
+    std::cout << "Testing: GridCrossingBuy..." << std::endl;
+
+    GridMartinStrategy strategy;
+    strategy.base_price_ = 100000.0;
+    strategy.grid_count_ = 10;
+    strategy.grid_spacing_ = 0.01;
+    strategy.amount_per_grid_ = 100.0;
+
+    strategy.on_init();
+    strategy.on_start();
+
+    // Simulate being at grid 9 (top grid) initially
+    strategy.set_last_grid_index(9);
+
+    // Price drops from ~99000 to ~95000 (crossing multiple grids down)
+    BarData bar;
+    bar.close_price = 95000.0;
+    strategy.on_bar(bar);
+
+    // Should have bought some position
+    TEST_ASSERT(strategy.total_position() > 0.0, "Should have position after price drop");
+
+    // Average cost should be around 95000 range
+    TEST_ASSERT(strategy.avg_cost() > 0.0, "Should have avg cost");
+
+    std::cout << "  PASSED: GridCrossingBuy" << std::endl;
+    return 0;
+}
+
+int test_fifo_sell_order() {
+    std::cout << "Testing: FIFOSellOrder..." << std::endl;
+
+    GridMartinStrategy strategy;
+    strategy.base_price_ = 100000.0;
+    strategy.grid_count_ = 10;
+    strategy.grid_spacing_ = 0.01;
+    strategy.amount_per_grid_ = 100.0;
+
+    strategy.on_init();
+    strategy.on_start();
+
+    // Simulate buying at grid 5 (price ~95000)
+    strategy.set_last_grid_index(9);
+    BarData bar1;
+    bar1.close_price = 95000.0;
+    strategy.on_bar(bar1);
+
+    double position_after_buy = strategy.total_position();
+
+    // Now price goes back up (selling FIFO)
+    strategy.set_last_grid_index(5);
+    BarData bar2;
+    bar2.close_price = 97000.0;
+    strategy.on_bar(bar2);
+
+    // Position should decrease
+    TEST_ASSERT(strategy.total_position() < position_after_buy, "Position should decrease after sell");
+
+    std::cout << "  PASSED: FIFOSellOrder" << std::endl;
+    return 0;
+}
+
 int main() {
     std::cout << "=== GridMartinStrategy Unit Tests ===" << std::endl;
 
     int failed = 0;
     failed += test_calculate_grid_levels();
     failed += test_get_grid_index();
+    failed += test_grid_crossing_buy();
+    failed += test_fifo_sell_order();
 
     std::cout << "\n=== Results ===" << std::endl;
     if (failed == 0) {
