@@ -136,6 +136,42 @@ int test_fifo_sell_order() {
     return 0;
 }
 
+int test_stop_loss_trigger() {
+    std::cout << "Testing: StopLossTrigger..." << std::endl;
+
+    GridMartinStrategy strategy;
+    strategy.base_price_ = 100000.0;
+    strategy.grid_count_ = 10;
+    strategy.grid_spacing_ = 0.01;
+    strategy.amount_per_grid_ = 100.0;
+
+    strategy.on_init();
+    strategy.on_start();
+
+    // Simulate buying position
+    strategy.set_last_grid_index(9);
+    BarData bar1;
+    bar1.close_price = 95000.0;
+    strategy.on_bar(bar1);
+
+    // Verify position exists
+    TEST_ASSERT(strategy.total_position() > 0.0, "Should have position before stop loss");
+
+    // Price drops below stop loss (grid 0 = 90000)
+    BarData bar2;
+    bar2.close_price = 85000.0;
+    strategy.on_bar(bar2);
+
+    // Position should be cleared
+    TEST_ASSERT(strategy.total_position() == 0.0, "Position should be 0 after stop loss");
+
+    // Trading should be stopped
+    TEST_ASSERT(!strategy.is_trading(), "Trading should be stopped after stop loss");
+
+    std::cout << "  PASSED: StopLossTrigger" << std::endl;
+    return 0;
+}
+
 int main() {
     std::cout << "=== GridMartinStrategy Unit Tests ===" << std::endl;
 
@@ -144,6 +180,7 @@ int main() {
     failed += test_get_grid_index();
     failed += test_grid_crossing_buy();
     failed += test_fifo_sell_order();
+    failed += test_stop_loss_trigger();
 
     std::cout << "\n=== Results ===" << std::endl;
     if (failed == 0) {

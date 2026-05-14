@@ -53,6 +53,7 @@ public:
     double avg_cost() const { return avg_cost_; }
     const std::queue<int>& buy_queue() const { return buy_queue_; }
     void set_last_grid_index(int idx) { last_grid_index_ = idx; }  // For testing
+    bool is_trading() const { return trading_; }  // For testing
 
 private:
     std::vector<double> grid_levels_;      // Grid price levels
