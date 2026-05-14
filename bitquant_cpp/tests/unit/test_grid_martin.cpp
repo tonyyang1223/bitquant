@@ -115,7 +115,7 @@ int test_fifo_sell_order() {
     strategy.on_init();
     strategy.on_start();
 
-    // Simulate buying at grid 5 (price ~95000)
+    // Start at grid 9 (top), price drops to grid 5, triggering buys
     strategy.set_last_grid_index(9);
     BarData bar1;
     bar1.close_price = 95000.0;
@@ -123,7 +123,7 @@ int test_fifo_sell_order() {
 
     double position_after_buy = strategy.total_position();
 
-    // Now price goes back up (selling FIFO)
+    // Set last_grid to 5, then price rises to grid 7, triggering FIFO sell
     strategy.set_last_grid_index(5);
     BarData bar2;
     bar2.close_price = 97000.0;
