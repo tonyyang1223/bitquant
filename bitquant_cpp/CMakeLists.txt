@@ -64,6 +64,7 @@ add_library(bitquant
     src/exchange/exchange_factory.cpp
     src/strategy/builtin_strategies.cpp
     src/strategy/validation_strategy.cpp
+    src/strategy/grid_martin_strategy.cpp
 )
 
 target_include_directories(bitquant
