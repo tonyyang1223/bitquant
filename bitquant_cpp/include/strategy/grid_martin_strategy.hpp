@@ -14,7 +14,6 @@
 #include "engine/strategy.hpp"
 #include <vector>
 #include <queue>
-#include <algorithm>
 
 namespace bitquant {
 
