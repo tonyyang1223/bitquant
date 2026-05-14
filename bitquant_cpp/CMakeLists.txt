@@ -313,6 +313,13 @@ if(BUILD_TESTS)
     target_link_libraries(test_validation_strategy PRIVATE bitquant)
     add_test(NAME validation_strategy_tests COMMAND test_validation_strategy)
 
+    # GridMartinStrategy tests
+    add_executable(test_grid_martin
+        tests/unit/test_grid_martin.cpp
+    )
+    target_link_libraries(test_grid_martin PRIVATE bitquant)
+    add_test(NAME grid_martin_tests COMMAND test_grid_martin)
+
     find_package(GTest QUIET)
     if(GTest_FOUND)
         add_executable(bitquant_tests
