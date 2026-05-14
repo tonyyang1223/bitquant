@@ -4,6 +4,7 @@
  */
 
 #include "strategy/builtin_strategies.hpp"
+#include "strategy/grid_martin_strategy.hpp"
 #include "utils/logger.hpp"
 #include <cmath>
 
@@ -308,6 +309,8 @@ std::unique_ptr<IStrategy> StrategyFactory::create(const std::string& name) {
         return std::make_unique<AtrRsiStrategy>();
     } else if (name == "Turtle" || name == "TurtleStrategy") {
         return std::make_unique<TurtleStrategy>();
+    } else if (name == "GridMartin" || name == "GridMartinStrategy") {
+        return std::make_unique<GridMartinStrategy>();
     }
 
     return nullptr;
@@ -319,7 +322,8 @@ std::vector<std::string> StrategyFactory::list_strategies() {
         "Rsi",
         "Bollinger",
         "AtrRsi",
-        "Turtle"
+        "Turtle",
+        "GridMartin"
     };
 }
 
