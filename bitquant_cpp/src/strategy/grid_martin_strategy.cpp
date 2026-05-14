@@ -48,6 +48,12 @@ void GridMartinStrategy::on_bar(const BarData& bar) {
     // Get current grid index
     int current_grid = get_grid_index(price);
 
+    // Log bar processing for debugging
+    if (last_grid_index_ >= 0 && current_grid != last_grid_index_) {
+        write_log("Bar: $" + std::to_string(static_cast<int64_t>(price)) +
+                 " | Grid change: " + std::to_string(last_grid_index_) + " -> " + std::to_string(current_grid));
+    }
+
     // Check stop loss first
     check_stop_loss(price);
 
@@ -126,8 +132,12 @@ void GridMartinStrategy::execute_grid_trade(int from_grid, int to_grid, double p
 
     if (grid_diff > 0) {
         // Price went UP - sell positions (FIFO)
+        write_log("Grid UP: " + std::to_string(from_grid) + " -> " + std::to_string(to_grid) +
+                 " | Selling " + std::to_string(grid_diff) + " position(s)");
+
         for (int i = 0; i < grid_diff; ++i) {
             if (buy_queue_.empty()) {
+                write_log("  No more positions to sell (queue empty)");
                 break;
             }
 
@@ -142,9 +152,10 @@ void GridMartinStrategy::execute_grid_trade(int from_grid, int to_grid, double p
                 double cost = grid_costs_[grid_to_sell];
                 double profit = (price - cost) * sell_volume;
 
-                write_log("SELL Grid " + std::to_string(grid_to_sell) +
+                write_log("  SELL Grid " + std::to_string(grid_to_sell) +
                          " | Price: $" + std::to_string(static_cast<int64_t>(price)) +
                          " | Volume: " + std::to_string(sell_volume) +
+                         " | Cost: $" + std::to_string(static_cast<int64_t>(cost)) +
                          " | Profit: $" + std::to_string(static_cast<int64_t>(profit)));
 
                 // Reset grid position
@@ -153,19 +164,29 @@ void GridMartinStrategy::execute_grid_trade(int from_grid, int to_grid, double p
                 total_position_ -= sell_volume;
             }
         }
+
+        // Log remaining position
+        write_log("  Remaining position: " + std::to_string(total_position_) +
+                 " | Avg cost: $" + std::to_string(static_cast<int64_t>(avg_cost_)));
+
     } else if (grid_diff < 0) {
         // Price went DOWN - buy positions
         int grids_crossed = -grid_diff;
+
+        write_log("Grid DOWN: " + std::to_string(from_grid) + " -> " + std::to_string(to_grid) +
+                 " | Buying " + std::to_string(grids_crossed) + " position(s)");
 
         for (int i = 0; i < grids_crossed; ++i) {
             int grid_to_buy = from_grid - i - 1;
 
             if (grid_to_buy < 0 || grid_to_buy >= grid_count_) {
+                write_log("  Skip grid " + std::to_string(grid_to_buy) + " (out of range)");
                 break;
             }
 
             // Skip if already have position at this grid
             if (grid_positions_[grid_to_buy] > 0.0) {
+                write_log("  Skip grid " + std::to_string(grid_to_buy) + " (already has position)");
                 continue;
             }
 
@@ -184,11 +205,15 @@ void GridMartinStrategy::execute_grid_trade(int from_grid, int to_grid, double p
             double total_cost = avg_cost_ * (total_position_ - buy_volume) + price * buy_volume;
             avg_cost_ = total_cost / total_position_;
 
-            write_log("BUY Grid " + std::to_string(grid_to_buy) +
+            write_log("  BUY Grid " + std::to_string(grid_to_buy) +
                      " | Price: $" + std::to_string(static_cast<int64_t>(price)) +
                      " | Volume: " + std::to_string(buy_volume) +
                      " | Amount: $" + std::to_string(static_cast<int64_t>(amount_per_grid_)));
         }
+
+        // Log total position after buying
+        write_log("  Total position: " + std::to_string(total_position_) +
+                 " | Avg cost: $" + std::to_string(static_cast<int64_t>(avg_cost_)));
     }
 }
 
@@ -200,6 +225,13 @@ void GridMartinStrategy::check_stop_loss(double price) {
 
     double stop_price = grid_levels_[0];
 
+    // Log when price approaches stop loss
+    if (price < stop_price * 1.02 && price >= stop_price && total_position_ > 0.0) {
+        write_log("[WARNING] Price approaching stop loss: $" + std::to_string(static_cast<int64_t>(price)) +
+                 " | Stop price: $" + std::to_string(static_cast<int64_t>(stop_price)) +
+                 " | Position: " + std::to_string(total_position_));
+    }
+
     if (price < stop_price && total_position_ > 0.0) {
         write_log("[STOP LOSS] Triggered at $" + std::to_string(static_cast<int64_t>(stop_price)) +
                  " | Current: $" + std::to_string(static_cast<int64_t>(price)));
@@ -209,7 +241,9 @@ void GridMartinStrategy::check_stop_loss(double price) {
 
         // Calculate loss
         double loss = (price - avg_cost_) * total_position_;
-        write_log("[STOP LOSS] Position closed | Loss: $" + std::to_string(static_cast<int64_t>(loss)));
+        write_log("[STOP LOSS] Position closed | Position: " + std::to_string(total_position_) +
+                 " | Avg cost: $" + std::to_string(static_cast<int64_t>(avg_cost_)) +
+                 " | Loss: $" + std::to_string(static_cast<int64_t>(loss)));
 
         // Reset state
         total_position_ = 0.0;
@@ -225,6 +259,7 @@ void GridMartinStrategy::check_stop_loss(double price) {
 
         // Stop trading
         trading_ = false;
+        write_log("[STOP LOSS] Trading stopped. Strategy will not execute further trades.");
     }
 }
 

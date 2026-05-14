@@ -7,6 +7,7 @@
 
 #include "engine/strategy.hpp"
 #include "engine/broker.hpp"
+#include <iostream>
 
 namespace bitquant {
 
@@ -39,9 +40,9 @@ EngineType IStrategy::get_engine_type() const {
 }
 
 void IStrategy::write_log(const std::string& msg) {
-    if (broker_) {
-        // TODO: Implement logging through broker
-    }
+    // Output to stdout for debugging
+    // In production, this could be routed through a logging system
+    std::cout << "[GridMartin] " << msg << std::endl;
 }
 
 order_id_t IStrategy::buy(double price, double volume, bool stop) {
