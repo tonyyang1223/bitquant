@@ -606,7 +606,7 @@ void WebSocketClient::do_subscribe(const std::string& stream) {
     } else if (channel.substr(0, 5) == "kline") {
         std::string interval = (channel.length() > 6) ? channel.substr(6) : "1m";
         handle = ws.klines(symbol.c_str(), interval.c_str(),
-            [this, stream](const char* fl, int ec, std::string errmsg, binapi::ws::kline_t msg) {
+            [this, stream, interval](const char* fl, int ec, std::string errmsg, binapi::ws::kline_t msg) {
                 if (ec) {
                     if (impl_->error_callback) {
                         impl_->error_callback(stream + ": " + errmsg);
@@ -616,10 +616,14 @@ void WebSocketClient::do_subscribe(const std::string& stream) {
                 std::ostringstream oss;
                 oss << R"({"stream":")" << stream << R"(",)"
                     << R"("e":"kline",)"
+                    << R"("E":)" << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()
+                    ).count() << ","
                     << R"("s":")" << msg.s << R"(",)"
                     << R"("k":{)"
                     << R"("t":)" << msg.t << ","
                     << R"("T":)" << msg.T << ","
+                    << R"("i":")" << interval << R"(",)"
                     << R"("o":")" << msg.o << R"(",)"
                     << R"("c":")" << msg.c << R"(",)"
                     << R"("h":")" << msg.h << R"(",)"

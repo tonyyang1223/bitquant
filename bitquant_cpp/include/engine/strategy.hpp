@@ -26,6 +26,7 @@ namespace bitquant {
 
 // Forward declaration
 class Broker;
+class PaperBroker;
 
 /**
  * @brief Engine type enumeration
@@ -127,6 +128,15 @@ public:
         auto it = params_.find(name);
         return (it != params_.end()) ? it->second : default_val;
     }
+
+    //=========================================================================
+    // Broker configuration
+    //=========================================================================
+
+    /**
+     * @brief Set PaperBroker for paper trading
+     */
+    void set_paper_broker(PaperBroker* broker);
 
     //=========================================================================
     // Position queries
@@ -266,11 +276,17 @@ protected:
     Broker* broker_ = nullptr;
 
     /**
+     * @brief PaperBroker access (for paper trading mode)
+     */
+    PaperBroker* paper_broker_ = nullptr;
+
+    /**
      * @brief Array manager for technical indicators
      */
     ArrayManager am_;
 
     friend class Broker;
+    friend class PaperBroker;
 };
 
 //=============================================================================

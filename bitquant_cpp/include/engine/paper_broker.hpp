@@ -101,6 +101,62 @@ public:
     void cancel_all_orders();
 
     //=========================================================================
+    // Broker-compatible Interface (for IStrategy::buy/sell)
+    //=========================================================================
+
+    /**
+     * @brief Buy (open long) - Broker-compatible method
+     * @param price Limit price
+     * @param volume Order volume
+     * @return Order ID
+     */
+    order_id_t buy(double price, double volume);
+
+    /**
+     * @brief Sell (close long) - Broker-compatible method
+     * @param price Limit price
+     * @param volume Order volume
+     * @return Order ID
+     */
+    order_id_t sell(double price, double volume);
+
+    /**
+     * @brief Short (open short) - Broker-compatible method
+     * @param price Limit price
+     * @param volume Order volume
+     * @return Order ID
+     */
+    order_id_t short_order(double price, double volume);
+
+    /**
+     * @brief Cover (close short) - Broker-compatible method
+     * @param price Limit price
+     * @param volume Order volume
+     * @return Order ID
+     */
+    order_id_t cover(double price, double volume);
+
+    /**
+     * @brief Market buy - Broker-compatible method
+     */
+    order_id_t market_buy(double volume);
+
+    /**
+     * @brief Market sell - Broker-compatible method
+     */
+    order_id_t market_sell(double volume);
+
+    /**
+     * @brief Send stop order - Broker-compatible method
+     */
+    order_id_t send_stop_order(Direction direction, Offset offset, double price, double volume);
+
+    /**
+     * @brief Cancel order by ID - Broker-compatible method
+     */
+    void cancel_order(order_id_t order_id);
+
+    //=========================================================================
     // Market Data Input (for Fill Simulation)
     //=========================================================================
 

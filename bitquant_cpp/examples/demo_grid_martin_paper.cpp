@@ -7,6 +7,11 @@
  * - GridMartinStrategy with paper trading
  * - PaperBroker for simulated order execution
  * - Full logging for debugging
+ * - Support for Binance Testnet (simulated trading)
+ *
+ * Usage:
+ *   Production: ./demo_grid_martin_paper
+ *   Testnet:    ./demo_grid_martin_paper --testnet
  */
 
 #include "engine/paper_broker.hpp"
@@ -36,10 +41,86 @@ void signal_handler(int) {
 }
 
 //=============================================================================
+// Configuration
+//=============================================================================
+
+struct DemoConfig {
+    bool use_testnet = false;
+    std::string api_key;
+    std::string api_secret;
+    std::string symbol = "BTCUSDT";
+    double base_price = 85000.0;
+    int grid_count = 10;
+    double grid_spacing = 0.001;  // 0.1% for frequent trading
+    double amount_per_grid = 100.0;
+    double initial_capital = 10000.0;
+};
+
+void print_usage(const char* program) {
+    std::cout << "Usage: " << program << " [options]\n\n"
+              << "Options:\n"
+              << "  --testnet             Use Binance Testnet\n"
+              << "  --api-key KEY         API Key (or set BINANCE_API_KEY env var)\n"
+              << "  --api-secret SECRET   API Secret (or set BINANCE_API_SECRET env var)\n"
+              << "  --symbol SYMBOL       Trading symbol (default: BTCUSDT)\n"
+              << "  --base-price PRICE    Base price for grid (default: current price)\n"
+              << "  --grid-count N        Number of grids (default: 10)\n"
+              << "  --grid-spacing PCT    Grid spacing as decimal (default: 0.001 = 0.1%)\n"
+              << "  --amount-per-grid A   Amount per grid in USD (default: 100)\n"
+              << "  --help                Show this help\n\n"
+              << "Examples:\n"
+              << "  " << program << " --testnet\n"
+              << "  " << program << " --symbol ETHUSDT --grid-spacing 0.002\n";
+}
+
+DemoConfig parse_args(int argc, char* argv[]) {
+    DemoConfig config;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if (arg == "--testnet") {
+            config.use_testnet = true;
+        } else if (arg == "--api-key" && i + 1 < argc) {
+            config.api_key = argv[++i];
+        } else if (arg == "--api-secret" && i + 1 < argc) {
+            config.api_secret = argv[++i];
+        } else if (arg == "--symbol" && i + 1 < argc) {
+            config.symbol = argv[++i];
+        } else if (arg == "--base-price" && i + 1 < argc) {
+            config.base_price = std::stod(argv[++i]);
+        } else if (arg == "--grid-count" && i + 1 < argc) {
+            config.grid_count = std::stoi(argv[++i]);
+        } else if (arg == "--grid-spacing" && i + 1 < argc) {
+            config.grid_spacing = std::stod(argv[++i]);
+        } else if (arg == "--amount-per-grid" && i + 1 < argc) {
+            config.amount_per_grid = std::stod(argv[++i]);
+        } else if (arg == "--help") {
+            print_usage(argv[0]);
+            exit(0);
+        }
+    }
+
+    // Check environment variables
+    if (config.api_key.empty()) {
+        const char* env_key = std::getenv("BINANCE_API_KEY");
+        if (env_key) config.api_key = env_key;
+    }
+    if (config.api_secret.empty()) {
+        const char* env_secret = std::getenv("BINANCE_API_SECRET");
+        if (env_secret) config.api_secret = env_secret;
+    }
+
+    return config;
+}
+
+//=============================================================================
 // Paper Trading Demo
 //=============================================================================
 
-int main() {
+int main(int argc, char* argv[]) {
+    DemoConfig config = parse_args(argc, argv);
+
     std::cout << "╔════════════════════════════════════════════════════════════╗\n";
     std::cout << "║     Grid Martin Strategy - Paper Trading Demo              ║\n";
     std::cout << "╚════════════════════════════════════════════════════════════╝\n\n";
@@ -47,24 +128,24 @@ int main() {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    // Configuration
-    const std::string symbol = "BTCUSDT";
-    const double base_price = 85000.0;      // Manual base price setting
-    const int grid_count = 10;
-    const double grid_spacing = 0.01;       // 1%
-    const double amount_per_grid = 100.0;   // $100 per grid
-    const double initial_capital = 10000.0;
+    // Display configuration
+    std::cout << "[Config] Environment: " << (true ? "TESTNET" : "PRODUCTION") << "\n";
+    std::cout << "[Config] Symbol: " << config.symbol << "\n";
+    std::cout << "[Config] Grid Count: " << config.grid_count << "\n";
+    std::cout << "[Config] Grid Spacing: " << (config.grid_spacing * 100) << "%\n";
+    std::cout << "[Config] Amount per Grid: $" << config.amount_per_grid << "\n";
+    std::cout << "[Config] Initial Capital: $" << config.initial_capital << "\n\n";
 
     try {
         // Step 1: Create PaperBroker
         std::cout << "[1] Creating PaperBroker...\n";
         PaperBrokerConfig broker_config;
-        broker_config.initial_capital = initial_capital;
+        broker_config.initial_capital = config.initial_capital;
         broker_config.commission_rate = 0.001;    // 0.1% commission
         broker_config.slippage_rate = 0.0005;     // 0.05% slippage
 
         PaperBroker broker(broker_config);
-        std::cout << "    Initial capital: $" << initial_capital << "\n";
+        std::cout << "    Initial capital: $" << config.initial_capital << "\n";
         std::cout << "    Commission: 0.1%\n";
         std::cout << "    Slippage: 0.05%\n";
 
@@ -110,45 +191,75 @@ int main() {
             std::cout << "[StrategyManager] " << msg << std::endl;
         });
 
-        // Step 4: Add GridMartinStrategy
-        std::cout << "\n[4] Adding GridMartinStrategy...\n";
-        auto strategy = std::make_unique<GridMartinStrategy>();
-        strategy->base_price_ = base_price;
-        strategy->grid_count_ = grid_count;
-        strategy->grid_spacing_ = grid_spacing;
-        strategy->amount_per_grid_ = amount_per_grid;
-        strategy->symbol_ = symbol;
-
-        std::cout << "    Symbol: " << symbol << "\n";
-        std::cout << "    Base Price: $" << base_price << "\n";
-        std::cout << "    Grid Count: " << grid_count << "\n";
-        std::cout << "    Grid Spacing: " << (grid_spacing * 100) << "%\n";
-        std::cout << "    Amount per Grid: $" << amount_per_grid << "\n";
-
-        // Calculate and display grid levels
-        std::cout << "\n    Grid Levels:\n";
-        for (int i = 0; i < grid_count; ++i) {
-            double level = base_price * (1.0 - grid_spacing * (grid_count - i));
-            std::cout << "      Grid " << std::setw(2) << i << ": $" << level << "\n";
-        }
-
-        strategy_manager.add_strategy("grid_martin", std::move(strategy),
-                                       symbol + ".BINANCE", {});
-        strategy_manager.init_strategy("grid_martin");
-        strategy_manager.start_strategy("grid_martin");
-
-        // Step 5: Connect to Binance
-        std::cout << "\n[5] Connecting to Binance for real-time data...\n";
+        // Step 4: Connect to Binance
+        std::cout << "\n[4] Connecting to Binance...\n";
         BinanceSpotGateway gateway;
         GatewayConfig gw_config;
-        gw_config.api_key = "";      // Public data, no API key needed
-        gw_config.api_secret = "";
+        gw_config.api_key = "vxYrtaRfcErhB3u1cgCvPSg82ySR5oQJeeXO51CI2p1FXAm0m9XX8n60I9yFaeGq";
+        gw_config.api_secret = "5HOnKSK0AJMZ8shRiH1nlvbmYgxlPKBYlmJSaweIdZFTKcDTI7UlTfJE16FW0pQe";
+        gw_config.testnet = true;  // 使用测试网
 
         if (!gateway.connect(gw_config)) {
             std::cerr << "Failed to connect to Binance: " << gateway.last_error() << std::endl;
             return 1;
         }
-        std::cout << "    Connected!\n";
+        std::cout << "    Connected to " << (true ? "Testnet" : "Production") << "!\n";
+
+        // Get current price if base_price not set
+        if (config.base_price <= 0) {
+            config.base_price = gateway.get_price(config.symbol);
+            std::cout << "    Current " << config.symbol << " price: $" << config.base_price << "\n";
+        }
+
+        // Show account balance if API key provided
+        if (!config.api_key.empty()) {
+            auto accounts = gateway.query_account_all();
+            std::cout << "    Account balances:\n";
+            for (const auto& acc : accounts) {
+                if (acc.balance > 0) {
+                    std::cout << "      " << acc.accountid << ": " << acc.balance << "\n";
+                }
+            }
+        }
+
+        // Step 5: Add GridMartinStrategy
+        std::cout << "\n[5] Adding GridMartinStrategy...\n";
+
+        // Get current price as base price
+        double current_price = gateway.get_price(config.symbol);
+        if (current_price <= 0) {
+            std::cerr << "Failed to get current price" << std::endl;
+            return 1;
+        }
+
+        auto strategy = std::make_unique<GridMartinStrategy>();
+        strategy->base_price_ = current_price;  // Use current price as base
+        strategy->grid_count_ = config.grid_count;
+        strategy->grid_spacing_ = config.grid_spacing;
+        strategy->amount_per_grid_ = config.amount_per_grid;
+        strategy->symbol_ = config.symbol;
+
+        // Connect strategy to PaperBroker for order execution
+        strategy->set_paper_broker(&broker);
+
+        std::cout << "    Symbol: " << config.symbol << "\n";
+        std::cout << "    Base Price: $" << current_price << " (current market price)\n";
+        std::cout << "    Grid Count: " << config.grid_count << "\n";
+        std::cout << "    Grid Spacing: " << (config.grid_spacing * 100) << "%\n";
+        std::cout << "    Amount per Grid: $" << config.amount_per_grid << "\n";
+
+        // Calculate and display grid levels (symmetric around current price)
+        int half_grid = config.grid_count / 2;
+        std::cout << "\n    Grid Levels (symmetric around $" << current_price << "):\n";
+        for (int i = 0; i < config.grid_count; ++i) {
+            double level = current_price * (1.0 + config.grid_spacing * (i - half_grid));
+            std::cout << "      Grid " << std::setw(2) << i << ": $" << level << "\n";
+        }
+
+        strategy_manager.add_strategy("grid_martin", std::move(strategy),
+                                       config.symbol + ".0", {});  // 0 = Exchange::BINANCE
+        strategy_manager.init_strategy("grid_martin");
+        strategy_manager.start_strategy("grid_martin");
 
         // Step 6: Setup data flow
         std::cout << "\n[6] Setting up data flow...\n";
@@ -189,10 +300,10 @@ int main() {
         });
 
         // Subscribe to market data
-        gateway.subscribe_tick(SubscribeRequest{.symbol = symbol});
-        gateway.subscribe_bar(symbol, Interval::MINUTE_1);
+        gateway.subscribe_tick(SubscribeRequest{.symbol = config.symbol});
+        gateway.subscribe_bar(config.symbol, Interval::MINUTE_1);
 
-        std::cout << "    Subscribed to " << symbol << " tick and 1m bar\n";
+        std::cout << "    Subscribed to " << config.symbol << " tick and 1m bar\n";
 
         // Step 7: Run paper trading
         std::cout << "\n[7] Paper trading running...\n";
@@ -206,13 +317,13 @@ int main() {
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
             double equity = broker.get_equity();
-            double position = broker.get_position(symbol);
+            double position = broker.get_position(config.symbol);
             int trades = broker.get_trade_count();
 
             std::cout << "\r[Live] " << std::setw(4) << elapsed << "s | "
                       << "Ticks: " << std::setw(6) << tick_count << " | "
                       << "Bars: " << std::setw(4) << bar_count << " | "
-                      << symbol << ": $" << std::fixed << std::setprecision(2) << last_price << " | "
+                      << config.symbol << ": $" << std::fixed << std::setprecision(2) << last_price << " | "
                       << "Position: " << std::setprecision(6) << position << " | "
                       << "Equity: $" << std::setprecision(2) << equity << " | "
                       << "Trades: " << trades
@@ -236,11 +347,11 @@ int main() {
         std::cout << "║                   Final Results                             ║\n";
         std::cout << "╠════════════════════════════════════════════════════════════╣\n";
         std::cout << "║ Initial Capital:     $   " << std::setw(10) << std::fixed << std::setprecision(2)
-                  << initial_capital << "                        ║\n";
+                  << config.initial_capital << "                        ║\n";
         std::cout << "║ Final Equity:       $   " << std::setw(10) << broker.get_equity() << "                        ║\n";
         std::cout << "║ Cash Balance:       $   " << std::setw(10) << broker.get_balance() << "                        ║\n";
         std::cout << "║ Position:                 " << std::setw(8) << std::setprecision(6)
-                  << broker.get_position(symbol) << " BTC                   ║\n";
+                  << broker.get_position(config.symbol) << " BTC                   ║\n";
         std::cout << "║ Total Trades:               " << std::setw(6) << broker.get_trade_count() << "                        ║\n";
         std::cout << "║ Total Commission:   $   " << std::setw(10) << std::setprecision(2)
                   << broker.get_total_commission() << "                        ║\n";

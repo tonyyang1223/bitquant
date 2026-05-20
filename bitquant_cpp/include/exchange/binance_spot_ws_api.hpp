@@ -76,18 +76,22 @@ public:
 
     /**
      * @brief Connect to market data stream
+     * @param testnet Use testnet endpoint if true
      * @param proxy_host Proxy host (optional)
      * @param proxy_port Proxy port (optional)
      * @return true on success
      */
-    bool connect_market_stream(const std::string& proxy_host = "", int proxy_port = 0);
+    bool connect_market_stream(bool testnet = false,
+                               const std::string& proxy_host = "",
+                               int proxy_port = 0);
 
     /**
      * @brief Connect to user data stream
      * @param listen_key Listen key from REST API
+     * @param testnet Use testnet endpoint if true
      * @return true on success
      */
-    bool connect_user_stream(const std::string& listen_key);
+    bool connect_user_stream(const std::string& listen_key, bool testnet = false);
 
     /**
      * @brief Close all connections

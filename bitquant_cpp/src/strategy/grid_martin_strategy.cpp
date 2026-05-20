@@ -6,6 +6,8 @@
 #include "strategy/grid_martin_strategy.hpp"
 #include "utils/logger.hpp"
 #include <algorithm>
+#include <iostream>
+#include <iomanip>
 
 namespace bitquant {
 
@@ -16,6 +18,12 @@ GridMartinStrategy::GridMartinStrategy() {
 }
 
 void GridMartinStrategy::on_init() {
+    std::cout << "[GridMartin::on_init] DEBUG: base_price_=" << base_price_
+              << " grid_count_=" << grid_count_
+              << " grid_spacing_=" << grid_spacing_
+              << " amount_per_grid_=" << amount_per_grid_
+              << " symbol_=" << symbol_ << std::endl;
+
     calculate_grid_levels();
 
     // Initialize grid positions and costs
@@ -49,9 +57,12 @@ void GridMartinStrategy::on_bar(const BarData& bar) {
     int current_grid = get_grid_index(price);
 
     // Log bar processing for debugging
-    if (last_grid_index_ >= 0 && current_grid != last_grid_index_) {
+    if (last_grid_index_ < 0) {
+        write_log("First bar: $" + std::to_string(static_cast<int64_t>(price)) +
+                 " | Grid: " + std::to_string(current_grid));
+    } else if (current_grid != last_grid_index_) {
         write_log("Bar: $" + std::to_string(static_cast<int64_t>(price)) +
-                 " | Grid change: " + std::to_string(last_grid_index_) + " -> " + std::to_string(current_grid));
+                 " | Grid CROSS: " + std::to_string(last_grid_index_) + " -> " + std::to_string(current_grid));
     }
 
     // Check stop loss first
@@ -89,12 +100,25 @@ void GridMartinStrategy::calculate_grid_levels() {
     grid_levels_.clear();
     grid_levels_.reserve(grid_count_);
 
-    // Calculate grid levels from bottom to top
-    // grid_levels_[i] = base_price * (1 - grid_spacing * (grid_count - i))
+    // Calculate grid levels symmetrically around base price
+    // Half the grids above base_price, half below
+    // Grid levels from bottom to top:
+    // grid_levels_[i] = base_price * (1 - grid_spacing * (grid_count/2 - i))
+    // This puts base_price in the middle of the grid range
+
+    int half_grid = grid_count_ / 2;
+
     for (int i = 0; i < grid_count_; ++i) {
-        double level = base_price_ * (1.0 - grid_spacing_ * (grid_count_ - i));
+        // Grid i is at offset (i - half_grid) from center
+        // Negative offset = below base_price, positive = above
+        double level = base_price_ * (1.0 + grid_spacing_ * (i - half_grid));
         grid_levels_.push_back(level);
     }
+
+    write_log("Grid range: $" + std::to_string(static_cast<int64_t>(grid_levels_.front())) +
+             " - $" + std::to_string(static_cast<int64_t>(grid_levels_.back())));
+    write_log("Base price $" + std::to_string(static_cast<int64_t>(base_price_)) +
+             " is at grid index " + std::to_string(half_grid));
 }
 
 int GridMartinStrategy::get_grid_index(double price) const {
@@ -192,6 +216,11 @@ void GridMartinStrategy::execute_grid_trade(int from_grid, int to_grid, double p
 
             // Calculate buy volume based on fixed amount
             double buy_volume = amount_per_grid_ / price;
+
+            std::cout << std::fixed << std::setprecision(8);
+            std::cout << "[GridMartin] DEBUG before buy: price=" << price
+                      << " amount_per_grid_=" << amount_per_grid_
+                      << " buy_volume=" << buy_volume << std::endl;
 
             buy(price, buy_volume);
 

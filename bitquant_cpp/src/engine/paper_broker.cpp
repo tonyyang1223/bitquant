@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <iomanip>
 
 namespace bitquant {
 
@@ -118,6 +119,104 @@ void PaperBroker::cancel_all_orders() {
 
     open_orders_.clear();
     std::cout << "[PaperBroker] All orders cancelled" << std::endl;
+}
+
+//=============================================================================
+// Broker-compatible Interface
+//=============================================================================
+
+order_id_t PaperBroker::buy(double price, double volume) {
+    std::cout << std::fixed << std::setprecision(8);
+    std::cout << "[PaperBroker::buy] DEBUG: price=" << price << " volume=" << volume << std::endl;
+    OrderRequest req;
+    req.symbol = "BTCUSDT";  // Default symbol, should be set properly
+    req.exchange = Exchange::BINANCE;
+    req.direction = Direction::LONG;
+    req.type = OrderType::LIMIT;
+    req.price = price;
+    req.volume = volume;
+
+    std::string order_id = send_order(req);
+    try {
+        return std::stoull(order_id.substr(6));  // Extract number from "PAPER_N"
+    } catch (...) {
+        return 0;
+    }
+}
+
+order_id_t PaperBroker::sell(double price, double volume) {
+    OrderRequest req;
+    req.symbol = "BTCUSDT";
+    req.exchange = Exchange::BINANCE;
+    req.direction = Direction::SHORT;
+    req.type = OrderType::LIMIT;
+    req.price = price;
+    req.volume = volume;
+
+    std::string order_id = send_order(req);
+    try {
+        return std::stoull(order_id.substr(6));
+    } catch (...) {
+        return 0;
+    }
+}
+
+order_id_t PaperBroker::short_order(double price, double volume) {
+    return sell(price, volume);  // Same as sell for spot
+}
+
+order_id_t PaperBroker::cover(double price, double volume) {
+    return buy(price, volume);  // Same as buy for spot
+}
+
+order_id_t PaperBroker::market_buy(double volume) {
+    OrderRequest req;
+    req.symbol = "BTCUSDT";
+    req.exchange = Exchange::BINANCE;
+    req.direction = Direction::LONG;
+    req.type = OrderType::TAKER;
+    req.price = 0;  // Market order
+    req.volume = volume;
+
+    std::string order_id = send_order(req);
+    try {
+        return std::stoull(order_id.substr(6));
+    } catch (...) {
+        return 0;
+    }
+}
+
+order_id_t PaperBroker::market_sell(double volume) {
+    OrderRequest req;
+    req.symbol = "BTCUSDT";
+    req.exchange = Exchange::BINANCE;
+    req.direction = Direction::SHORT;
+    req.type = OrderType::TAKER;
+    req.price = 0;
+    req.volume = volume;
+
+    std::string order_id = send_order(req);
+    try {
+        return std::stoull(order_id.substr(6));
+    } catch (...) {
+        return 0;
+    }
+}
+
+order_id_t PaperBroker::send_stop_order(Direction direction, Offset offset, double price, double volume) {
+    // Stop orders convert to limit orders when triggered
+    // For simplicity, just create a limit order
+    if (direction == Direction::LONG) {
+        return buy(price, volume);
+    } else {
+        return sell(price, volume);
+    }
+}
+
+void PaperBroker::cancel_order(order_id_t order_id) {
+    std::ostringstream ss;
+    ss << "PAPER_" << order_id;
+    cancel_order(ss.str());
 }
 
 //=============================================================================
@@ -243,31 +342,29 @@ void PaperBroker::try_fill_orders(double bid, double ask, const std::string& sym
         double fill_price = 0.0;
 
         if (order.direction == Direction::LONG) {
-            // Buy order - use ask price
-            double effective_ask = ask * (1.0 + config_.slippage_rate);
-
+            // Buy order - check if market ask is at or below our limit price
             if (order.type == OrderType::TAKER) {
-                // Market order - fill immediately
+                // Market order - fill immediately at ask + slippage
                 should_fill = true;
-                fill_price = effective_ask;
+                fill_price = ask * (1.0 + config_.slippage_rate);
             } else if (order.type == OrderType::LIMIT || order.type == OrderType::MAKER) {
-                // Limit order - fill if price <= order price
-                if (order.price >= effective_ask) {
+                // Limit buy fills when ask <= order price
+                if (ask <= order.price) {
                     should_fill = true;
-                    fill_price = std::min(order.price, effective_ask);
+                    fill_price = std::min(order.price, ask * (1.0 + config_.slippage_rate));
                 }
             }
         } else {
-            // Sell order - use bid price
-            double effective_bid = bid * (1.0 - config_.slippage_rate);
-
+            // Sell order - check if market bid is at or above our limit price
             if (order.type == OrderType::TAKER) {
+                // Market order - fill immediately at bid - slippage
                 should_fill = true;
-                fill_price = effective_bid;
+                fill_price = bid * (1.0 - config_.slippage_rate);
             } else if (order.type == OrderType::LIMIT || order.type == OrderType::MAKER) {
-                if (order.price <= effective_bid) {
+                // Limit sell fills when bid >= order price
+                if (bid >= order.price) {
                     should_fill = true;
-                    fill_price = std::max(order.price, effective_bid);
+                    fill_price = std::max(order.price, bid * (1.0 - config_.slippage_rate));
                 }
             }
         }

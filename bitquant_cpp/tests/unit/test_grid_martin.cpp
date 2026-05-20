@@ -37,11 +37,16 @@ int test_calculate_grid_levels() {
     // Should have grid_count levels
     TEST_ASSERT(levels.size() == 10, "Grid count should be 10");
 
-    // Grid 0 (lowest): base_price * (1 - 10 * 0.01) = 90000
-    ASSERT_NEAR(levels[0], 90000.0, 0.01, "Grid 0 should be 90000");
+    // New grid calculation: base_price * (1 + grid_spacing * (i - half_grid))
+    // half_grid = 5, so:
+    // Grid 0 (lowest): 100000 * (1 + 0.01 * (0 - 5)) = 100000 * 0.95 = 95000
+    ASSERT_NEAR(levels[0], 95000.0, 0.01, "Grid 0 should be 95000");
 
-    // Grid 9 (highest): base_price * (1 - 1 * 0.01) = 99000
-    ASSERT_NEAR(levels[9], 99000.0, 0.01, "Grid 9 should be 99000");
+    // Grid 5 (center): 100000 * (1 + 0.01 * (5 - 5)) = 100000 * 1.00 = 100000
+    ASSERT_NEAR(levels[5], 100000.0, 0.01, "Grid 5 should be 100000 (center)");
+
+    // Grid 9 (highest): 100000 * (1 + 0.01 * (9 - 5)) = 100000 * 1.04 = 104000
+    ASSERT_NEAR(levels[9], 104000.0, 0.01, "Grid 9 should be 104000");
 
     std::cout << "  PASSED: CalculateGridLevels" << std::endl;
     return 0;
@@ -85,18 +90,21 @@ int test_grid_crossing_buy() {
     strategy.on_init();
     strategy.on_start();
 
+    // New grid range: 95000 - 104000 (symmetric around base price)
+    // Grid 9 = 104000 (highest), Grid 5 = 100000 (center)
+
     // Simulate being at grid 9 (top grid) initially
     strategy.set_last_grid_index(9);
 
-    // Price drops from ~99000 to ~95000 (crossing multiple grids down)
+    // Price drops from ~104000 to ~96000 (crossing multiple grids down)
     BarData bar;
-    bar.close_price = 95000.0;
+    bar.close_price = 96000.0;
     strategy.on_bar(bar);
 
     // Should have bought some position
     TEST_ASSERT(strategy.total_position() > 0.0, "Should have position after price drop");
 
-    // Average cost should be around 95000 range
+    // Average cost should be around 96000 range
     TEST_ASSERT(strategy.avg_cost() > 0.0, "Should have avg cost");
 
     std::cout << "  PASSED: GridCrossingBuy" << std::endl;
@@ -115,18 +123,19 @@ int test_fifo_sell_order() {
     strategy.on_init();
     strategy.on_start();
 
-    // Start at grid 9 (top), price drops to grid 5, triggering buys
+    // New grid range: 95000 - 104000
+    // Start at grid 9 (104000), price drops to grid 3 (~98000), triggering buys
     strategy.set_last_grid_index(9);
     BarData bar1;
-    bar1.close_price = 95000.0;
+    bar1.close_price = 98000.0;
     strategy.on_bar(bar1);
 
     double position_after_buy = strategy.total_position();
 
-    // Set last_grid to 5, then price rises to grid 7, triggering FIFO sell
-    strategy.set_last_grid_index(5);
+    // Set last_grid to 3, then price rises to grid 5 (~100000), triggering FIFO sell
+    strategy.set_last_grid_index(3);
     BarData bar2;
-    bar2.close_price = 97000.0;
+    bar2.close_price = 100000.0;
     strategy.on_bar(bar2);
 
     // Position should decrease
@@ -148,18 +157,18 @@ int test_stop_loss_trigger() {
     strategy.on_init();
     strategy.on_start();
 
-    // Simulate buying position
+    // Simulate buying position at grid 5 (100000)
     strategy.set_last_grid_index(9);
     BarData bar1;
-    bar1.close_price = 95000.0;
+    bar1.close_price = 100000.0;
     strategy.on_bar(bar1);
 
     // Verify position exists
     TEST_ASSERT(strategy.total_position() > 0.0, "Should have position before stop loss");
 
-    // Price drops below stop loss (grid 0 = 90000)
+    // Price drops below stop loss (grid 0 = 95000)
     BarData bar2;
-    bar2.close_price = 85000.0;
+    bar2.close_price = 94000.0;  // Below grid 0
     strategy.on_bar(bar2);
 
     // Position should be cleared

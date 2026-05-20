@@ -72,6 +72,7 @@ bool BinanceSpotGateway::connect(const std::string& config) {
 bool BinanceSpotGateway::connect(const GatewayConfig& config) {
     rest_api_ = std::make_unique<BinanceSpotRestApi>();
 
+    testnet_ = config.testnet;
     std::string host = config.testnet ? "testnet.binance.vision" : "api.binance.com";
     std::string port = "443";
 
@@ -283,24 +284,26 @@ std::vector<OrderData> BinanceSpotGateway::query_open_orders(const std::string& 
 void BinanceSpotGateway::subscribe_tick(const SubscribeRequest& req) {
     if (!ws_api_) {
         ws_api_ = std::make_unique<BinanceSpotWsApi>(this);
-        ws_api_->connect_market_stream();
-        ws_api_->on_tick([this](const TickData& tick) {
-            std::lock_guard<std::mutex> lock(ticks_mutex_);
-            last_ticks_[tick.symbol] = tick;
-            if (tick_callback_) tick_callback_(tick);
-        });
+        ws_api_->connect_market_stream(testnet_);
     }
+    // Always set/update the tick callback
+    ws_api_->on_tick([this](const TickData& tick) {
+        std::lock_guard<std::mutex> lock(ticks_mutex_);
+        last_ticks_[tick.symbol] = tick;
+        if (tick_callback_) tick_callback_(tick);
+    });
     ws_api_->subscribe_ticker(req.symbol);
 }
 
 void BinanceSpotGateway::subscribe_bar(const std::string& symbol, Interval interval) {
     if (!ws_api_) {
         ws_api_ = std::make_unique<BinanceSpotWsApi>(this);
-        ws_api_->connect_market_stream();
-        ws_api_->on_bar([this](const BarData& bar) {
-            if (bar_callback_) bar_callback_(bar);
-        });
+        ws_api_->connect_market_stream(testnet_);
     }
+    // Always set/update the bar callback
+    ws_api_->on_bar([this](const BarData& bar) {
+        if (bar_callback_) bar_callback_(bar);
+    });
     std::string interval_str = interval_to_binance(interval);
     ws_api_->subscribe_kline(symbol, interval_str);
 }
@@ -343,7 +346,7 @@ bool BinanceSpotGateway::start_user_stream() {
     if (!ws_api_) {
         ws_api_ = std::make_unique<BinanceSpotWsApi>(this);
     }
-    ws_api_->connect_user_stream(listen_key_);
+    ws_api_->connect_user_stream(listen_key_, testnet_);
     // Order updates are processed in BinanceSpotWsApi::process_order_update
     // which calls process_order_update on the gateway directly
     return true;

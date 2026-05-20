@@ -195,6 +195,13 @@ if(BUILD_TESTS)
     target_link_libraries(test_paper_broker PRIVATE bitquant)
     add_test(NAME paper_broker_tests COMMAND test_paper_broker)
 
+    # Branch coverage tests
+    add_executable(test_branch_coverage
+        tests/integration/test_branch_coverage.cpp
+    )
+    target_link_libraries(test_branch_coverage PRIVATE bitquant)
+    add_test(NAME branch_coverage_tests COMMAND test_branch_coverage)
+
     # BinanceSpotRestApi tests
     add_executable(test_binance_spot_rest_api
         tests/unit/test_binance_spot_rest_api.cpp

@@ -202,6 +202,9 @@ private:
     // Tick cache
     std::unordered_map<std::string, TickData> last_ticks_;
     std::mutex ticks_mutex_;
+
+    // Testnet mode
+    bool testnet_ = false;
 };
 
 } // namespace bitquant

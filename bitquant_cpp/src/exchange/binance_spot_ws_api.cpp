@@ -31,9 +31,11 @@ BinanceSpotWsApi::~BinanceSpotWsApi() {
 // Connection Management
 //=============================================================================
 
-bool BinanceSpotWsApi::connect_market_stream(const std::string& proxy_host, int proxy_port) {
+bool BinanceSpotWsApi::connect_market_stream(bool testnet,
+                                             const std::string& proxy_host,
+                                             int proxy_port) {
     WebSocketConfig config;
-    config.host = "stream.binance.com";
+    config.host = testnet ? "stream.testnet.binance.vision" : "stream.binance.com";
     config.port = "443";
     config.use_ssl = true;
 
@@ -98,9 +100,9 @@ bool BinanceSpotWsApi::connect_market_stream(const std::string& proxy_host, int 
     return ws_client_->connect();
 }
 
-bool BinanceSpotWsApi::connect_user_stream(const std::string& listen_key) {
+bool BinanceSpotWsApi::connect_user_stream(const std::string& listen_key, bool testnet) {
     WebSocketConfig config;
-    config.host = "stream.binance.com";
+    config.host = testnet ? "stream.testnet.binance.vision" : "stream.binance.com";
     config.port = "443";
     config.use_ssl = true;
 
@@ -290,22 +292,29 @@ void BinanceSpotWsApi::process_message(const flatjson::fjson& data) {
         process_order_update(data);
     } else if (event_type == "outboundAccountPosition") {
         process_account_update(data);
+    } else {
+        std::cout << "[WebSocket] Unknown event type: " << event_type << std::endl;
     }
 }
 
 void BinanceSpotWsApi::process_ticker(const flatjson::fjson& data) {
+    // Safely access required fields
+    if (!data.contains("s") || !data.contains("c")) {
+        return;  // Missing required fields
+    }
+
     TickData tick;
     tick.symbol = data["s"].to_string();
     tick.exchange = Exchange::BINANCE;
-    tick.datetime = data["E"].to_int64();
+    tick.datetime = data.contains("E") ? data["E"].to_int64() : 0;
     tick.last_price = data["c"].to_double();
-    tick.volume = data["v"].to_double();
+    tick.volume = data.contains("v") ? data["v"].to_double() : 0.0;
     tick.open_interest = 0.0; // Spot has no open interest
 
-    // Binance ticker provides these
-    tick.high_price = data["h"].to_double();
-    tick.low_price = data["l"].to_double();
-    tick.open_price = data["o"].to_double();
+    // Binance ticker provides these (optional)
+    tick.high_price = data.contains("h") ? data["h"].to_double() : 0.0;
+    tick.low_price = data.contains("l") ? data["l"].to_double() : 0.0;
+    tick.open_price = data.contains("o") ? data["o"].to_double() : 0.0;
 
     // Bid/Ask - use last price as approximation (full depth needed for real bid/ask)
     tick.bid_price_1 = tick.last_price;
@@ -332,18 +341,39 @@ void BinanceSpotWsApi::process_depth(const flatjson::fjson& data) {
 }
 
 void BinanceSpotWsApi::process_kline(const flatjson::fjson& data) {
+    if (!data.contains("k")) {
+        return;  // Missing kline data
+    }
+
     auto k = data["k"];
 
+    // Symbol is at root level, close price is in k object
+    // Safely access required fields
+    if (!data.contains("s") || !k.contains("c")) {
+        std::cerr << "[WebSocket] Kline data missing required fields. ";
+        std::cerr << "s: " << (data.contains("s") ? data["s"].to_string() : "MISSING");
+        std::cerr << ", c: " << (k.contains("c") ? k["c"].to_string() : "MISSING") << std::endl;
+        return;
+    }
+
     BarData bar;
-    bar.symbol = k["s"].to_string();
+    bar.symbol = data["s"].to_string();  // Symbol at root level
     bar.exchange = Exchange::BINANCE;
-    bar.interval = interval_from_binance(k["i"].to_string());
-    bar.datetime = k["t"].to_int64();
-    bar.open_price = k["o"].to_double();
-    bar.high_price = k["h"].to_double();
-    bar.low_price = k["l"].to_double();
+    bar.interval = k.contains("i") ? interval_from_binance(k["i"].to_string()) : Interval::MINUTE_1;
+    bar.datetime = k.contains("t") ? k["t"].to_int64() : 0;
+    bar.open_price = k.contains("o") ? k["o"].to_double() : 0.0;
+    bar.high_price = k.contains("h") ? k["h"].to_double() : 0.0;
+    bar.low_price = k.contains("l") ? k["l"].to_double() : 0.0;
     bar.close_price = k["c"].to_double();
-    bar.volume = k["v"].to_double();
+    bar.volume = k.contains("v") ? k["v"].to_double() : 0.0;
+
+    // Log kline received (only on grid completion)
+    if (k.contains("x") && k["x"].to_bool()) {
+        std::cout << "[WebSocket] Kline BAR COMPLETED: " << bar.symbol
+                  << " C:" << bar.close_price
+                  << " V:" << bar.volume
+                  << std::endl;
+    }
 
     // Callback (set by Gateway)
     if (bar_callback_) {

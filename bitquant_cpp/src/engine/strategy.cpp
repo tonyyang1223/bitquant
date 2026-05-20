@@ -7,7 +7,9 @@
 
 #include "engine/strategy.hpp"
 #include "engine/broker.hpp"
+#include "engine/paper_broker.hpp"
 #include <iostream>
+#include <iomanip>
 
 namespace bitquant {
 
@@ -16,7 +18,14 @@ namespace bitquant {
 //=============================================================================
 
 double IStrategy::position() const {
+    if (paper_broker_) {
+        return paper_broker_->get_position("BTCUSDT");  // Default symbol
+    }
     return broker_ ? broker_->position() : 0.0;
+}
+
+void IStrategy::set_paper_broker(PaperBroker* broker) {
+    paper_broker_ = broker;
 }
 
 Direction IStrategy::position_side() const {
@@ -46,66 +55,117 @@ void IStrategy::write_log(const std::string& msg) {
 }
 
 order_id_t IStrategy::buy(double price, double volume, bool stop) {
-    if (broker_ && trading_) {
-        if (stop) {
-            // Send stop order for buy
-            return broker_->send_stop_order(Direction::LONG, Offset::OPEN, price, volume);
+    std::cout << std::fixed << std::setprecision(8);
+    std::cout << "[IStrategy::buy] DEBUG: this=" << this
+              << " price=" << price << " volume=" << volume
+              << " paper_broker_=" << paper_broker_
+              << " broker_=" << broker_
+              << " trading_=" << trading_ << std::endl;
+    if (trading_) {
+        // Check paper broker first (for paper trading)
+        if (paper_broker_) {
+            if (stop) {
+                return paper_broker_->send_stop_order(Direction::LONG, Offset::OPEN, price, volume);
+            }
+            return paper_broker_->buy(price, volume);
         }
-        return broker_->buy(price, volume);
+        // Fall back to regular broker (for backtesting)
+        if (broker_) {
+            if (stop) {
+                return broker_->send_stop_order(Direction::LONG, Offset::OPEN, price, volume);
+            }
+            return broker_->buy(price, volume);
+        }
     }
     return 0;
 }
 
 order_id_t IStrategy::sell(double price, double volume, bool stop) {
-    if (broker_ && trading_) {
-        if (stop) {
-            return broker_->send_stop_order(Direction::SHORT, Offset::CLOSE, price, volume);
+    if (trading_) {
+        if (paper_broker_) {
+            if (stop) {
+                return paper_broker_->send_stop_order(Direction::SHORT, Offset::CLOSE, price, volume);
+            }
+            return paper_broker_->sell(price, volume);
         }
-        return broker_->sell(price, volume);
+        if (broker_) {
+            if (stop) {
+                return broker_->send_stop_order(Direction::SHORT, Offset::CLOSE, price, volume);
+            }
+            return broker_->sell(price, volume);
+        }
     }
     return 0;
 }
 
 order_id_t IStrategy::short_order(double price, double volume, bool stop) {
-    if (broker_ && trading_) {
-        if (stop) {
-            return broker_->send_stop_order(Direction::SHORT, Offset::OPEN, price, volume);
+    if (trading_) {
+        if (paper_broker_) {
+            if (stop) {
+                return paper_broker_->send_stop_order(Direction::SHORT, Offset::OPEN, price, volume);
+            }
+            return paper_broker_->short_order(price, volume);
         }
-        return broker_->short_order(price, volume);
+        if (broker_) {
+            if (stop) {
+                return broker_->send_stop_order(Direction::SHORT, Offset::OPEN, price, volume);
+            }
+            return broker_->short_order(price, volume);
+        }
     }
     return 0;
 }
 
 order_id_t IStrategy::cover(double price, double volume, bool stop) {
-    if (broker_ && trading_) {
-        if (stop) {
-            return broker_->send_stop_order(Direction::LONG, Offset::CLOSE, price, volume);
+    if (trading_) {
+        if (paper_broker_) {
+            if (stop) {
+                return paper_broker_->send_stop_order(Direction::LONG, Offset::CLOSE, price, volume);
+            }
+            return paper_broker_->cover(price, volume);
         }
-        return broker_->cover(price, volume);
+        if (broker_) {
+            if (stop) {
+                return broker_->send_stop_order(Direction::LONG, Offset::CLOSE, price, volume);
+            }
+            return broker_->cover(price, volume);
+        }
     }
     return 0;
 }
 
 void IStrategy::market_buy(double volume) {
-    if (broker_ && trading_) {
-        broker_->market_buy(volume);
+    if (trading_) {
+        if (paper_broker_) {
+            paper_broker_->market_buy(volume);
+        } else if (broker_) {
+            broker_->market_buy(volume);
+        }
     }
 }
 
 void IStrategy::market_sell(double volume) {
-    if (broker_ && trading_) {
-        broker_->market_sell(volume);
+    if (trading_) {
+        if (paper_broker_) {
+            paper_broker_->market_sell(volume);
+        } else if (broker_) {
+            broker_->market_sell(volume);
+        }
     }
 }
 
 void IStrategy::cancel_order(order_id_t order_id) {
-    if (broker_) {
+    if (paper_broker_) {
+        paper_broker_->cancel_order(order_id);
+    } else if (broker_) {
         broker_->cancel_order(order_id);
     }
 }
 
 void IStrategy::cancel_all_orders() {
-    if (broker_) {
+    if (paper_broker_) {
+        paper_broker_->cancel_all_orders();
+    } else if (broker_) {
         broker_->cancel_all_orders();
     }
 }
