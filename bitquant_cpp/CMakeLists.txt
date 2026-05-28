@@ -46,6 +46,7 @@ add_library(bitquant
     src/data/ring_buffer.cpp
     src/data/array_manager.cpp
     src/data/bar_generator.cpp
+    src/data/price_smoother.cpp
     src/database/sqlite_database.cpp
     src/engine/broker.cpp
     src/engine/strategy.cpp
@@ -327,6 +328,13 @@ if(BUILD_TESTS)
     )
     target_link_libraries(test_grid_martin PRIVATE bitquant)
     add_test(NAME grid_martin_tests COMMAND test_grid_martin)
+
+    # PriceSmoother tests
+    add_executable(test_price_smoother
+        tests/unit/test_price_smoother.cpp
+    )
+    target_link_libraries(test_price_smoother PRIVATE bitquant pthread)
+    add_test(NAME price_smoother_tests COMMAND test_price_smoother)
 
     find_package(GTest QUIET)
     if(GTest_FOUND)

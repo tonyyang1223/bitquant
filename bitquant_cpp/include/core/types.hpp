@@ -249,6 +249,10 @@ struct TickData {
     double ask_price_1 = 0.0;
     double ask_volume_1 = 0.0;
 
+    // Price smoother metadata (for outlier detection)
+    bool is_anomaly = false;         // Flag for detected anomaly
+    double smoothed_price = 0.0;     // Smoothed price from PriceSmoother
+
     // VT symbol
     std::string vt_symbol() const {
         return symbol + "." + std::to_string(static_cast<int>(exchange));

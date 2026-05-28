@@ -12,8 +12,10 @@
 #pragma once
 
 #include "engine/strategy.hpp"
+#include "data/price_smoother.hpp"
 #include <vector>
 #include <queue>
+#include <memory>
 
 namespace bitquant {
 
@@ -31,6 +33,10 @@ public:
     double grid_spacing_ = 0.01;       // Grid spacing as percentage (1%)
     double amount_per_grid_ = 100.0;   // Fixed amount per grid ($)
     std::string symbol_ = "BTCUSDT";   // Trading symbol
+
+    // Price smoothing parameters (for outlier protection)
+    int smoothing_period_ = 10;        // Number of ticks for EMA buffer
+    double outlier_threshold_pct_ = 5.0;  // Percentage threshold for anomaly detection
 
     // Constructor
     GridMartinStrategy();
@@ -64,6 +70,9 @@ private:
     double avg_cost_ = 0.0;                // Average cost
     int last_grid_index_ = -1;             // Last grid index
     bool stop_loss_triggered_ = false;     // Stop loss flag
+
+    // Price smoother for outlier detection
+    std::unique_ptr<PriceSmoother> price_smoother_;
 };
 
 } // namespace bitquant

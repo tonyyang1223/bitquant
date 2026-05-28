@@ -30,7 +30,17 @@ void GridMartinStrategy::on_init() {
     grid_positions_.resize(grid_count_, 0.0);
     grid_costs_.resize(grid_count_, 0.0);
 
+    // Initialize price smoother for outlier protection
+    PriceSmootherConfig smoother_config;
+    smoother_config.smoothing_period = smoothing_period_;
+    smoother_config.outlier_threshold_pct = outlier_threshold_pct_;
+    smoother_config.ema_alpha = 1.0 / smoothing_period_;  // Standard EMA alpha
+    smoother_config.require_confirmation = true;
+    price_smoother_ = std::make_unique<PriceSmoother>(smoother_config);
+
     write_log("GridMartinStrategy initialized with " + std::to_string(grid_count_) + " grids");
+    write_log("PriceSmoother initialized: period=" + std::to_string(smoothing_period_) +
+             " threshold=" + std::to_string(static_cast<int>(outlier_threshold_pct_)) + "%");
 
     // Log grid levels
     for (int i = 0; i < grid_count_; ++i) {
@@ -52,29 +62,46 @@ void GridMartinStrategy::on_bar(const BarData& bar) {
     }
 
     double price = bar.close_price;
+    double smoothed_price = price;
 
-    // Get current grid index
-    int current_grid = get_grid_index(price);
+    // Apply price smoothing for outlier protection
+    if (price_smoother_ && price_smoother_->is_initialized()) {
+        auto result = price_smoother_->process(price, bar.datetime);
+        smoothed_price = result.smoothed_price;
+
+        // Log if anomaly detected
+        if (result.is_anomaly) {
+            write_log("[PriceSmoother] ANOMALY detected! Raw: $" +
+                     std::to_string(static_cast<int64_t>(price)) +
+                     " | Smoothed: $" + std::to_string(static_cast<int64_t>(smoothed_price)));
+        }
+    } else if (price_smoother_) {
+        // Warm-up period: process price to fill buffer
+        price_smoother_->process(price, bar.datetime);
+    }
+
+    // Get current grid index using smoothed price
+    int current_grid = get_grid_index(smoothed_price);
 
     // Log bar processing for debugging
     if (last_grid_index_ < 0) {
-        write_log("First bar: $" + std::to_string(static_cast<int64_t>(price)) +
+        write_log("First bar: $" + std::to_string(static_cast<int64_t>(smoothed_price)) +
                  " | Grid: " + std::to_string(current_grid));
     } else if (current_grid != last_grid_index_) {
-        write_log("Bar: $" + std::to_string(static_cast<int64_t>(price)) +
+        write_log("Bar: $" + std::to_string(static_cast<int64_t>(smoothed_price)) +
                  " | Grid CROSS: " + std::to_string(last_grid_index_) + " -> " + std::to_string(current_grid));
     }
 
-    // Check stop loss first
-    check_stop_loss(price);
+    // Check stop loss first (using smoothed price)
+    check_stop_loss(smoothed_price);
 
     if (!trading_) {
         return;  // Stopped after stop loss
     }
 
-    // Execute grid trades if grid changed
+    // Execute grid trades if grid changed (using smoothed price)
     if (last_grid_index_ >= 0 && current_grid != last_grid_index_) {
-        execute_grid_trade(last_grid_index_, current_grid, price);
+        execute_grid_trade(last_grid_index_, current_grid, smoothed_price);
     }
 
     // Update last grid index
