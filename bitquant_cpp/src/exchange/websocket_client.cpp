@@ -279,8 +279,11 @@ void WebSocketClient::monitor_loop() {
 
         check_connection_health();
 
-        // Handle reconnection if needed
-        if (impl_->state == ConnectionState::RECONNECT_PENDING) {
+        bool need_reconnect = (impl_->state == ConnectionState::RECONNECT_PENDING);
+        lock.unlock();  // Release lock before handle_reconnect to avoid deadlock
+
+        // Handle reconnection if needed (outside of lock)
+        if (need_reconnect) {
             handle_reconnect();
         }
     }
@@ -343,7 +346,20 @@ void WebSocketClient::handle_reconnect() {
     set_state(ConnectionState::CONNECTING);
 
     try {
-        // Recreate I/O context and websockets
+        // Step 1: Stop old I/O context first
+        std::cout << "[WebSocket] Stopping old I/O context..." << std::endl;
+        if (impl_->io_context) {
+            impl_->io_context->stop();
+        }
+
+        // Step 2: Wait for old I/O thread to finish
+        if (impl_->io_thread.joinable()) {
+            std::cout << "[WebSocket] Waiting for old I/O thread to join..." << std::endl;
+            impl_->io_thread.join();
+        }
+
+        // Step 3: Reset and recreate I/O context
+        std::cout << "[WebSocket] Creating new I/O context..." << std::endl;
         impl_->io_context = std::make_unique<boost::asio::io_context>();
         impl_->websockets = std::make_unique<binapi::ws::websockets>(
             *impl_->io_context,
@@ -357,17 +373,32 @@ void WebSocketClient::handle_reconnect() {
             impl_->config.stat_interval_sec
         );
 
-        // Restart I/O thread
+        // Step 4: Start new I/O thread
+        std::cout << "[WebSocket] Starting new I/O thread..." << std::endl;
         impl_->io_thread = std::thread([this]() { run_io_loop(); });
 
+        // Step 5: Reset message time for health check
+        impl_->last_message_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count();
+
+        // Step 6: Set connected state
         set_state(ConnectionState::CONNECTED);
+
+        // Step 7: Re-subscribe to all streams
+        std::cout << "[WebSocket] Re-subscribing to streams..." << std::endl;
         resubscribe_all();
 
+        // Step 8: Log success
+        std::cout << "[WebSocket] Reconnection successful!" << std::endl;
         impl_->reconnect_attempts = 0;  // Reset on success
 
     } catch (const std::exception& e) {
         std::cerr << "[WebSocket] Reconnect failed: " << e.what() << std::endl;
         set_state(ConnectionState::RECONNECT_PENDING);
+        if (impl_->error_callback) {
+            impl_->error_callback(std::string("Reconnect failed: ") + e.what());
+        }
     }
 }
 
