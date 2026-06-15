@@ -8,8 +8,34 @@
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
+#include <ctime>
 
 namespace bitquant {
+
+// Helper function for formatted logging
+namespace {
+    std::string get_timestamp() {
+        auto now = std::chrono::system_clock::now();
+        auto now_time = std::chrono::system_clock::to_time_t(now);
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) % 1000;
+
+        std::ostringstream oss;
+        oss << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S")
+            << "." << std::setfill('0') << std::setw(3) << ms.count();
+        return oss.str();
+    }
+
+    std::string get_pid() {
+        return std::to_string(getpid());
+    }
+
+    #define BROKER_LOG(level, msg) \
+        std::cout << "[" << get_timestamp() << "] " \
+                  << "[PID:" << get_pid() << "] " \
+                  << "[PaperBroker] [" << level << "] " \
+                  << msg << std::endl
+}
 
 //=============================================================================
 // Constructor

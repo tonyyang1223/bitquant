@@ -20,12 +20,14 @@
 #include "exchange/binance_spot_gateway.hpp"
 #include "strategy/grid_martin_strategy.hpp"
 #include "data/bar_generator.hpp"
+#include "utils/logger.hpp"
 #include <iostream>
 #include <iomanip>
 #include <atomic>
 #include <csignal>
 #include <thread>
 #include <chrono>
+#include <ctime>
 
 using namespace bitquant;
 
@@ -35,9 +37,40 @@ using namespace bitquant;
 
 std::atomic<bool> running{true};
 
+//=============================================================================
+// Log helper with timestamp, PID, and module
+//=============================================================================
+
+std::string get_timestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto now_time = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+
+    std::ostringstream oss;
+    oss << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S")
+        << "." << std::setfill('0') << std::setw(3) << ms.count();
+    return oss.str();
+}
+
+std::string get_pid() {
+    return std::to_string(getpid());
+}
+
+#define DEMO_LOG_MODULE(module, level, msg) \
+    std::cout << "[" << get_timestamp() << "] " \
+              << "[PID:" << get_pid() << "] " \
+              << "[" << module << "] [" << level << "] " \
+              << msg << std::endl
+
+#define DEMO_LOG_INFO(module, msg)  DEMO_LOG_MODULE(module, "INFO", msg)
+#define DEMO_LOG_WARN(module, msg)  DEMO_LOG_MODULE(module, "WARN", msg)
+#define DEMO_LOG_ERROR(module, msg) DEMO_LOG_MODULE(module, "ERROR", msg)
+#define DEMO_LOG_DEBUG(module, msg) DEMO_LOG_MODULE(module, "DEBUG", msg)
+
 void signal_handler(int) {
     running = false;
-    std::cout << "\n[Main] Shutdown signal received..." << std::endl;
+    DEMO_LOG_INFO("Main", "Shutdown signal received...");
 }
 
 //=============================================================================
@@ -151,18 +184,20 @@ int main(int argc, char* argv[]) {
 
         // Track order and trade updates
         broker.on_order([](const OrderData& order) {
-            std::cout << "[Order] " << order.orderid
-                      << " status: " << static_cast<int>(order.status)
-                      << " filled: " << order.traded << "/" << order.volume
-                      << " @ " << order.price
-                      << std::endl;
+            std::ostringstream oss;
+            oss << "OrderID: " << order.orderid
+                << " | Status: " << static_cast<int>(order.status)
+                << " | Filled: " << order.traded << "/" << order.volume
+                << " @ " << order.price;
+            DEMO_LOG_INFO("Order", oss.str());
         });
 
         broker.on_trade([](const TradeData& trade) {
-            std::cout << "[Trade] " << trade.tradeid
-                      << " " << (trade.direction == Direction::LONG ? "BUY" : "SELL")
-                      << " " << trade.volume << " @ " << trade.price
-                      << std::endl;
+            std::ostringstream oss;
+            oss << "TradeID: " << trade.tradeid
+                << " | " << (trade.direction == Direction::LONG ? "BUY" : "SELL")
+                << " " << trade.volume << " @ " << trade.price;
+            DEMO_LOG_INFO("Trade", oss.str());
         });
 
         // Step 2: Create RiskManager
@@ -176,7 +211,7 @@ int main(int argc, char* argv[]) {
 
         RiskManager risk_manager(risk_config);
         risk_manager.set_log_callback([](const std::string& msg) {
-            std::cout << "[Risk] " << msg << std::endl;
+            DEMO_LOG_WARN("Risk", msg);
         });
         std::cout << "    Order flow limit: " << risk_config.order_flow_limit << "/s\n";
         std::cout << "    Order size limit: " << risk_config.order_size_limit << " BTC\n";
@@ -188,7 +223,7 @@ int main(int argc, char* argv[]) {
         strategy_manager.set_paper_broker(&broker);
         strategy_manager.set_risk_manager(&risk_manager);
         strategy_manager.set_log_callback([](const std::string& msg) {
-            std::cout << "[StrategyManager] " << msg << std::endl;
+            DEMO_LOG_INFO("StrategyManager", msg);
         });
 
         // Step 4: Connect to Binance
@@ -272,6 +307,7 @@ int main(int argc, char* argv[]) {
         int bar_count = 0;
         double last_price = 0.0;
         auto start_time = std::chrono::steady_clock::now();
+        auto last_status_time = start_time;  // Track last status output
 
         // Tick callback
         gateway.on_tick([&](const TickData& tick) {
@@ -306,28 +342,35 @@ int main(int argc, char* argv[]) {
         std::cout << "    Subscribed to " << config.symbol << " tick and 1m bar\n";
 
         // Step 7: Run paper trading
-        std::cout << "\n[7] Paper trading running...\n";
-        std::cout << "    Press Ctrl+C to stop\n\n";
+        DEMO_LOG_INFO("Main", "Paper trading running. Press Ctrl+C to stop");
 
-        // Display loop
+        // Display loop - Output status every 60 seconds to reduce log volume
         while (running) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::seconds(10));  // Check every 10s
 
             auto now = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+            auto status_elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_status_time).count();
 
-            double equity = broker.get_equity();
-            double position = broker.get_position(config.symbol);
-            int trades = broker.get_trade_count();
+            // Output status every 60 seconds
+            if (status_elapsed >= 60) {
+                last_status_time = now;
 
-            std::cout << "\r[Live] " << std::setw(4) << elapsed << "s | "
-                      << "Ticks: " << std::setw(6) << tick_count << " | "
-                      << "Bars: " << std::setw(4) << bar_count << " | "
-                      << config.symbol << ": $" << std::fixed << std::setprecision(2) << last_price << " | "
-                      << "Position: " << std::setprecision(6) << position << " | "
-                      << "Equity: $" << std::setprecision(2) << equity << " | "
-                      << "Trades: " << trades
-                      << std::flush;
+                double equity = broker.get_equity();
+                double position = broker.get_position(config.symbol);
+                int trades = broker.get_trade_count();
+
+                std::ostringstream status;
+                status << "Elapsed: " << elapsed << "s | "
+                       << "Ticks: " << tick_count << " | "
+                       << "Bars: " << bar_count << " | "
+                       << config.symbol << ": $" << std::fixed << std::setprecision(2) << last_price << " | "
+                       << "Position: " << std::setprecision(6) << position << " | "
+                       << "Equity: $" << std::setprecision(2) << equity << " | "
+                       << "Trades: " << trades;
+
+                DEMO_LOG_INFO("Status", status.str());
+            }
         }
 
         // Step 8: Final report
