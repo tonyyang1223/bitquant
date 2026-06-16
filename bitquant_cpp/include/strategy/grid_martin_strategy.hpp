@@ -13,6 +13,7 @@
 
 #include "engine/strategy.hpp"
 #include "data/price_smoother.hpp"
+#include "data/market_state_analyzer.hpp"
 #include <vector>
 #include <queue>
 #include <memory>
@@ -73,6 +74,20 @@ private:
 
     // Price smoother for outlier detection
     std::unique_ptr<PriceSmoother> price_smoother_;
+
+    // Market state analyzer
+    std::unique_ptr<MarketStateAnalyzer> state_analyzer_;
+    MarketState current_market_state_ = MarketState::WAITING;
+
+    // State analyzer configuration
+    int state_period_ = 50;
+    double state_width_threshold_ = 5.0;
+    int state_confirmation_bars_ = 2;
+
+    // State transition methods
+    void handle_state_transition(MarketState new_state, double price);
+    void transition_to_trending(double price);
+    void transition_to_consolidation(double price);
 };
 
 } // namespace bitquant
