@@ -110,20 +110,20 @@ void test_state_transition_with_confirmation() {
     config.confirmation_bars = 2;
     MarketStateAnalyzer analyzer(config);
 
-    // Warm up with consolidation
+    // Warm up with consolidation (stable prices around 100)
     for (int i = 0; i < 10; ++i) {
         analyzer.update(101.0, 99.0, 100.0);
     }
     assert(analyzer.state() == MarketState::CONSOLIDATION);
 
-    // Single bar of trend (should not transition yet)
-    analyzer.update(110.0, 90.0, 100.0);
+    // First trending bar (change close price to create volatility)
+    analyzer.update(115.0, 85.0, 110.0);  // close moves to 110
     std::cout << "  After 1 trend bar: state=" << static_cast<int>(analyzer.state()) << "\n";
     // Should still be CONSOLIDATION due to confirmation requirement
     assert(analyzer.state() == MarketState::CONSOLIDATION);
 
-    // Second bar of trend (should transition now)
-    analyzer.update(110.0, 90.0, 100.0);
+    // Second trending bar (confirm transition)
+    analyzer.update(120.0, 80.0, 120.0);  // close moves to 120
     std::cout << "  After 2 trend bars: state=" << static_cast<int>(analyzer.state()) << "\n";
     assert(analyzer.state() == MarketState::TRENDING);
 
