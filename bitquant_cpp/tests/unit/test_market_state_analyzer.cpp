@@ -120,10 +120,12 @@ void test_state_transition_with_confirmation() {
     analyzer.update(110.0, 90.0, 100.0);
     std::cout << "  After 1 trend bar: state=" << static_cast<int>(analyzer.state()) << "\n";
     // Should still be CONSOLIDATION due to confirmation requirement
+    assert(analyzer.state() == MarketState::CONSOLIDATION);
 
     // Second bar of trend (should transition now)
     analyzer.update(110.0, 90.0, 100.0);
     std::cout << "  After 2 trend bars: state=" << static_cast<int>(analyzer.state()) << "\n";
+    assert(analyzer.state() == MarketState::TRENDING);
 
     std::cout << "  ✅ Passed - Confirmation mechanism works\n";
 }

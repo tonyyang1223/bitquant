@@ -337,6 +337,13 @@ if(BUILD_TESTS)
     target_link_libraries(test_price_smoother PRIVATE bitquant pthread)
     add_test(NAME price_smoother_tests COMMAND test_price_smoother)
 
+    # MarketStateAnalyzer tests
+    add_executable(test_market_state_analyzer
+        tests/unit/test_market_state_analyzer.cpp
+    )
+    target_link_libraries(test_market_state_analyzer PRIVATE bitquant pthread)
+    add_test(NAME market_state_analyzer_tests COMMAND test_market_state_analyzer)
+
     find_package(GTest QUIET)
     if(GTest_FOUND)
         add_executable(bitquant_tests
