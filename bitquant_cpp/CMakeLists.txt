@@ -47,6 +47,7 @@ add_library(bitquant
     src/data/array_manager.cpp
     src/data/bar_generator.cpp
     src/data/price_smoother.cpp
+    src/data/market_state_analyzer.cpp
     src/database/sqlite_database.cpp
     src/engine/broker.cpp
     src/engine/strategy.cpp

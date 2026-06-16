@@ -38,9 +38,19 @@ void GridMartinStrategy::on_init() {
     smoother_config.require_confirmation = true;
     price_smoother_ = std::make_unique<PriceSmoother>(smoother_config);
 
+    // Initialize market state analyzer
+    MarketStateConfig state_config;
+    state_config.period = state_period_;
+    state_config.width_threshold_pct = state_width_threshold_;
+    state_config.confirmation_bars = state_confirmation_bars_;
+    state_analyzer_ = std::make_unique<MarketStateAnalyzer>(state_config);
+
     write_log("GridMartinStrategy initialized with " + std::to_string(grid_count_) + " grids");
     write_log("PriceSmoother initialized: period=" + std::to_string(smoothing_period_) +
              " threshold=" + std::to_string(static_cast<int>(outlier_threshold_pct_)) + "%");
+    write_log("MarketStateAnalyzer initialized: period=" + std::to_string(state_period_) +
+             " threshold=" + std::to_string(state_width_threshold_) + "%" +
+             " confirmation=" + std::to_string(state_confirmation_bars_) + " bars");
 
     // Log grid levels
     for (int i = 0; i < grid_count_; ++i) {
@@ -69,42 +79,56 @@ void GridMartinStrategy::on_bar(const BarData& bar) {
         auto result = price_smoother_->process(price, bar.datetime);
         smoothed_price = result.smoothed_price;
 
-        // Log if anomaly detected
         if (result.is_anomaly) {
             write_log("[PriceSmoother] ANOMALY detected! Raw: $" +
                      std::to_string(static_cast<int64_t>(price)) +
                      " | Smoothed: $" + std::to_string(static_cast<int64_t>(smoothed_price)));
         }
     } else if (price_smoother_) {
-        // Warm-up period: process price to fill buffer
         price_smoother_->process(price, bar.datetime);
     }
 
-    // Get current grid index using smoothed price
+    // Update market state analyzer
+    MarketState new_state = current_market_state_;
+    if (state_analyzer_) {
+        new_state = state_analyzer_->update(bar.high_price, bar.low_price, bar.close_price);
+    }
+
+    // Handle state transition
+    if (new_state != current_market_state_) {
+        handle_state_transition(new_state, smoothed_price);
+        last_grid_index_ = get_grid_index(smoothed_price);
+        return;  // Wait for next bar after transition
+    }
+
+    // Only trade in consolidation state (or WAITING during warm-up)
+    if (current_market_state_ == MarketState::TRENDING) {
+        return;  // Wait in trending state
+    }
+
+    // Normal grid trading logic (consolidation state)
     int current_grid = get_grid_index(smoothed_price);
 
-    // Log bar processing for debugging
     if (last_grid_index_ < 0) {
-        write_log("First bar: $" + std::to_string(static_cast<int64_t>(smoothed_price)) +
+        write_log("First bar in consolidation: $" + std::to_string(static_cast<int64_t>(smoothed_price)) +
                  " | Grid: " + std::to_string(current_grid));
     } else if (current_grid != last_grid_index_) {
         write_log("Bar: $" + std::to_string(static_cast<int64_t>(smoothed_price)) +
                  " | Grid CROSS: " + std::to_string(last_grid_index_) + " -> " + std::to_string(current_grid));
     }
 
-    // Check stop loss first (using smoothed price)
+    // Check stop loss first
     check_stop_loss(smoothed_price);
 
     if (!trading_) {
         return;  // Stopped after stop loss
     }
 
-    // Execute grid trades if grid changed (using smoothed price)
+    // Execute grid trades if grid changed
     if (last_grid_index_ >= 0 && current_grid != last_grid_index_) {
         execute_grid_trade(last_grid_index_, current_grid, smoothed_price);
     }
 
-    // Update last grid index
     last_grid_index_ = current_grid;
 }
 
@@ -317,6 +341,77 @@ void GridMartinStrategy::check_stop_loss(double price) {
         trading_ = false;
         write_log("[STOP LOSS] Trading stopped. Strategy will not execute further trades.");
     }
+}
+
+void GridMartinStrategy::handle_state_transition(MarketState new_state, double price) {
+    if (new_state == MarketState::TRENDING) {
+        transition_to_trending(price);
+    } else if (new_state == MarketState::CONSOLIDATION) {
+        transition_to_consolidation(price);
+    }
+}
+
+void GridMartinStrategy::transition_to_trending(double price) {
+    write_log("[MarketState] TRANSITION: CONSOLIDATION -> TRENDING");
+    if (state_analyzer_) {
+        write_log("[MarketState] Channel width: " + std::to_string(state_analyzer_->channel_width_pct()) + "%");
+    }
+
+    // Close all positions immediately
+    if (total_position_ > 0.0) {
+        sell(price, total_position_);
+
+        double profit = (price - avg_cost_) * total_position_;
+        write_log("[MarketState] Closed position | Price: $" + std::to_string(static_cast<int64_t>(price)) +
+                 " | Position: " + std::to_string(total_position_) +
+                 " | Avg Cost: $" + std::to_string(static_cast<int64_t>(avg_cost_)) +
+                 " | P&L: $" + std::to_string(static_cast<int64_t>(profit)));
+
+        // Clear all state
+        total_position_ = 0.0;
+        avg_cost_ = 0.0;
+        std::fill(grid_positions_.begin(), grid_positions_.end(), 0.0);
+        std::fill(grid_costs_.begin(), grid_costs_.end(), 0.0);
+        while (!buy_queue_.empty()) buy_queue_.pop();
+    }
+
+    current_market_state_ = MarketState::TRENDING;
+    trading_ = false;
+    write_log("[MarketState] Trading paused, waiting for consolidation");
+}
+
+void GridMartinStrategy::transition_to_consolidation(double price) {
+    write_log("[MarketState] TRANSITION: TRENDING -> CONSOLIDATION");
+    if (state_analyzer_) {
+        write_log("[MarketState] Channel width: " + std::to_string(state_analyzer_->channel_width_pct()) + "%");
+    }
+
+    // Reset grid with new base price
+    base_price_ = price;
+    calculate_grid_levels();
+
+    // Reset grid state
+    std::fill(grid_positions_.begin(), grid_positions_.end(), 0.0);
+    std::fill(grid_costs_.begin(), grid_costs_.end(), 0.0);
+    total_position_ = 0.0;
+    avg_cost_ = 0.0;
+
+    // Reset PriceSmoother
+    if (price_smoother_) {
+        price_smoother_->reset();
+    }
+
+    // Clear queue
+    while (!buy_queue_.empty()) buy_queue_.pop();
+
+    current_market_state_ = MarketState::CONSOLIDATION;
+    trading_ = true;
+    last_grid_index_ = -1;  // Force re-initialization
+
+    write_log("[MarketState] Grid restarted | Base: $" + std::to_string(static_cast<int64_t>(base_price_)) +
+             " | Range: $" + std::to_string(static_cast<int64_t>(grid_levels_.front())) +
+             " - $" + std::to_string(static_cast<int64_t>(grid_levels_.back())));
+    write_log("[MarketState] Trading resumed");
 }
 
 } // namespace bitquant
