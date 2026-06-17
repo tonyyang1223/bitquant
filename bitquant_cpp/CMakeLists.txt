@@ -405,6 +405,9 @@ if(BUILD_EXAMPLES)
 
         add_executable(demo_grid_martin_paper examples/demo_grid_martin_paper.cpp)
         target_link_libraries(demo_grid_martin_paper PRIVATE bitquant)
+
+        add_executable(demo_market_state_simulation examples/demo_market_state_simulation.cpp)
+        target_link_libraries(demo_market_state_simulation PRIVATE bitquant)
     endif()
 endif()
 
