@@ -292,6 +292,17 @@ void BinanceSpotWsApi::process_message(const flatjson::fjson& data) {
         process_order_update(data);
     } else if (event_type == "outboundAccountPosition") {
         process_account_update(data);
+    } else if (event_type == "serverShutdown") {
+        // Binance server shutdown notification - trigger graceful reconnect
+        std::cout << "[WebSocket] Server shutdown notification received" << std::endl;
+        if (ws_client_) {
+            std::cout << "[WebSocket] Triggering reconnect for market stream..." << std::endl;
+            ws_client_->reconnect_now();
+        }
+        if (user_ws_client_) {
+            std::cout << "[WebSocket] Triggering reconnect for user stream..." << std::endl;
+            user_ws_client_->reconnect_now();
+        }
     } else {
         std::cout << "[WebSocket] Unknown event type: " << event_type << std::endl;
     }
